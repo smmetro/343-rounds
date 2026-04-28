@@ -29,6 +29,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .topbar .sub{font-size:12px;opacity:.8;margin-top:2px}
 .topbar-right{display:flex;align-items:center;gap:12px}
 .save-all{background:#fff;color:var(--acc);border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer}
+.import-btn{background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer}
+#import-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center}
+#import-overlay.open{display:flex}
+#import-box{background:var(--surf);border-radius:12px;padding:24px;width:90%;max-width:480px;display:flex;flex-direction:column;gap:14px}
+#import-box h3{margin:0;font-size:16px}
+#import-box p{margin:0;font-size:13px;opacity:.7}
+#import-json{width:100%;height:120px;border-radius:8px;border:1px solid var(--bdr);background:var(--surf2);color:var(--txt);padding:10px;font-size:12px;font-family:monospace;resize:vertical;box-sizing:border-box}
+.import-actions{display:flex;gap:10px;justify-content:flex-end}
 .logout-admin{background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer}
 .container{max-width:1100px;margin:0 auto;padding:28px 20px;display:flex;flex-direction:column;gap:20px}
 .panel{background:var(--surf);border-radius:var(--r);border:1px solid var(--bdr);overflow:hidden}
@@ -169,7 +177,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="topbar-right">
       <button class="logout-admin" onclick="doAdminLogout()">Sign Out</button>
+      <button class="import-btn" onclick="openImport()">Import Config</button>
       <button class="save-all" onclick="saveAll()">Save & Publish</button>
+    </div>
+  </div>
+
+  <!-- Import Config Overlay -->
+  <div id="import-overlay">
+    <div id="import-box">
+      <h3>Import Configuration</h3>
+      <p>Paste your config JSON below (copy it from another device's browser console using: <code>copy(localStorage.getItem('lc_admin_config'))</code>)</p>
+      <textarea id="import-json" placeholder="Paste JSON here..."></textarea>
+      <div class="import-actions">
+        <button class="logout-admin" onclick="closeImport()">Cancel</button>
+        <button class="save-all" onclick="doImport()">Import & Apply</button>
+      </div>
     </div>
   </div>
   <div class="container">
@@ -641,6 +663,22 @@ function deleteLog(tmplId,logId){
   (tmpl.logs||[]).forEach(l=>{if(l.condTrigger===logId){l.condTrigger='';l.condValue='';l.condEnabled=false;}});
   tmpl.logs=tmpl.logs.filter(l=>l.id!==logId);saveConfig(config);
   const secId='sec_'+tmplId+'_'+btoa(secName).replace(/=/g,'');renderLogs(tmplId,secName,secId);
+}
+
+// IMPORT CONFIG
+function openImport(){document.getElementById('import-overlay').classList.add('open');document.getElementById('import-json').value='';}
+function closeImport(){document.getElementById('import-overlay').classList.remove('open');}
+function doImport(){
+  const raw=document.getElementById('import-json').value.trim();
+  if(!raw){showToast('Nothing to import');return;}
+  try{
+    const parsed=JSON.parse(raw);
+    localStorage.setItem('lc_admin_config',JSON.stringify(parsed));
+    config=parsed;
+    closeImport();
+    showToast('✓ Config imported successfully');
+    renderTemplates();renderUsers();
+  }catch(e){showToast('Invalid JSON — check your paste');}
 }
 
 // SAVE ALL
