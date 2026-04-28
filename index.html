@@ -88,7 +88,7 @@
   // 4. Register inline service worker (cache-first, offline-capable)
   if ('serviceWorker' in navigator) {
     const swSrc = `
-const CACHE_NAME = 'daily-rounds-v1';
+const CACHE_NAME = 'daily-rounds-v2';
 const PAGE_URL   = self.registration.scope;
 
 self.addEventListener('install', evt => {
