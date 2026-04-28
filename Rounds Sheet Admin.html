@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rounds Admin Panel</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f4f5f7;--surf:#ffffff;--surf2:#f0f2f5;--acc:#2563eb;--acc2:#1d4ed8;--ok:#16a34a;--warn:#d97706;--danger:#dc2626;--txt:#111827;--txt2:#6b7280;--bdr:#e5e7eb;--r:10px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
+.auth-screen{display:none;min-height:100vh;align-items:center;justify-content:center;background:var(--bg)}
+.auth-screen.active{display:flex}
+.setpw-screen{display:none;min-height:100vh;align-items:center;justify-content:center;background:var(--bg)}
+.setpw-screen.active{display:flex}
+.main-screen{display:none;flex-direction:column;min-height:100vh}
+.main-screen.active{display:flex}
+.auth-box{background:var(--surf);border-radius:var(--r);padding:32px;border:1px solid var(--bdr);width:100%;max-width:400px;display:flex;flex-direction:column;gap:16px}
+.auth-box h1{font-size:20px;font-weight:800;color:var(--acc)}
+.auth-box p{font-size:13px;color:var(--txt2)}
+.auth-field{display:flex;flex-direction:column;gap:5px}
+.auth-field label{font-size:11px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.4px}
+.auth-field input{padding:10px 12px;border:1px solid var(--bdr);border-radius:7px;font-size:14px;color:var(--txt);outline:none;transition:border-color .15s}
+.auth-field input:focus{border-color:var(--acc)}
+.auth-btn{width:100%;padding:12px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:15px;font-weight:700;cursor:pointer}
+.auth-err{font-size:12px;color:var(--danger);display:none}
+.auth-err.show{display:block}
+.topbar{background:var(--acc);color:#fff;padding:14px 28px;display:flex;align-items:center;justify-content:space-between}
+.topbar h1{font-size:18px;font-weight:700}
+.topbar .sub{font-size:12px;opacity:.8;margin-top:2px}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.save-all{background:#fff;color:var(--acc);border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer}
+.logout-admin{background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer}
+.container{max-width:1100px;margin:0 auto;padding:28px 20px;display:flex;flex-direction:column;gap:20px}
+.panel{background:var(--surf);border-radius:var(--r);border:1px solid var(--bdr);overflow:hidden}
+.panel-hdr{padding:16px 20px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;background:var(--surf2)}
+.panel-hdr h2{font-size:15px;font-weight:700}
+.panel-body{padding:20px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.field-row.three{grid-template-columns:1fr 1fr 1fr}
+.field-row.single{grid-template-columns:1fr}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:12px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.4px}
+.field input,.field select,.field textarea{padding:9px 12px;border:1px solid var(--bdr);border-radius:7px;font-size:14px;color:var(--txt);background:#fff;outline:none;transition:border-color .15s;font-family:inherit}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--acc)}
+.field textarea{resize:vertical;min-height:60px}
+.tag-input{display:flex;flex-wrap:wrap;gap:6px;padding:7px 10px;border:1px solid var(--bdr);border-radius:7px;background:#fff;min-height:42px;cursor:text;align-items:center}
+.tag-input:focus-within{border-color:var(--acc)}
+.tag{background:#e0e7ff;color:var(--acc2);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px}
+.tag button{background:none;border:none;color:var(--acc2);cursor:pointer;font-size:14px;line-height:1;padding:0}
+.tag-input input{border:none;outline:none;font-size:13px;color:var(--txt);flex:1;min-width:120px;padding:2px 4px}
+.btn{padding:9px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
+.btn-primary{background:var(--acc);color:#fff}.btn-primary:hover{background:var(--acc2)}
+.btn-secondary{background:var(--surf2);color:var(--txt);border:1px solid var(--bdr)}.btn-secondary:hover{background:var(--bdr)}
+.btn-danger{background:#fee2e2;color:var(--danger);border:1px solid #fecaca}.btn-danger:hover{background:#fecaca}
+.btn-success{background:#dcfce7;color:var(--ok);border:1px solid #bbf7d0}.btn-success:hover{background:#bbf7d0}
+.btn-warn{background:#fef3c7;color:var(--warn);border:1px solid #fde68a}.btn-warn:hover{background:#fde68a}
+.btn-sm{padding:5px 10px;font-size:12px}
+.user-table{width:100%;border-collapse:collapse}
+.user-table th{text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid var(--bdr)}
+.user-table td{padding:12px 14px;border-bottom:1px solid var(--bdr);font-size:13px;vertical-align:middle}
+.user-table tr:last-child td{border-bottom:none}
+.user-status{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.status-active{background:#dcfce7;color:var(--ok)}
+.status-reset{background:#fef3c7;color:var(--warn)}
+.status-admin{background:#e0e7ff;color:var(--acc2)}
+.add-user-form{background:var(--surf2);border-radius:var(--r);padding:16px;margin-top:16px;border:1px solid var(--bdr);display:none}
+.add-user-form.open{display:block}
+/* DRAG AND DROP */
+.section-block{border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden;margin-bottom:10px;transition:opacity .2s;background:var(--surf)}
+.section-block:last-child{margin-bottom:0}
+.section-block.dragging{opacity:.4}
+.section-block.drag-over{border-color:var(--acc);box-shadow:0 0 0 2px rgba(37,99,235,.2)}
+.log-item{border:1px solid var(--bdr);border-radius:7px;margin-bottom:7px;overflow:hidden;background:#fff;transition:opacity .2s}
+.log-item:last-child{margin-bottom:0}
+.log-item.dragging{opacity:.4}
+.log-item.drag-over{border-color:var(--acc);box-shadow:0 0 0 2px rgba(37,99,235,.2)}
+.drag-handle{color:var(--txt2);font-size:16px;cursor:grab;padding:0 4px;flex-shrink:0;user-select:none}
+.drag-handle:active{cursor:grabbing}
+.sec-hdr{padding:11px 14px;background:var(--surf2);display:flex;align-items:center;gap:8px;user-select:none}
+.sec-hdr .sec-name{font-size:13px;font-weight:700;flex:1;cursor:pointer}
+.sec-hdr .sec-count{font-size:10px;color:var(--txt2);background:var(--bdr);padding:2px 7px;border-radius:20px}
+.sec-hdr .chevron{font-size:11px;color:var(--txt2);transition:transform .2s;cursor:pointer}
+.sec-hdr.open .chevron{transform:rotate(180deg)}
+.sec-controls{display:flex;gap:5px;align-items:center}
+.sec-body{display:none;padding:10px}
+.sec-body.open{display:block}
+.log-item-hdr{padding:10px 12px;display:flex;align-items:center;gap:8px;background:#fff}
+.log-item-hdr .log-item-name{font-size:13px;font-weight:600;flex:1;cursor:pointer}
+.log-item-hdr .log-item-meta{font-size:11px;color:var(--txt2)}
+.log-item-hdr .item-controls{display:flex;gap:4px;flex-shrink:0}
+.log-form{display:none;padding:14px;border-top:1px solid var(--bdr);background:var(--surf2)}
+.log-form.open{display:block}
+.form-section{margin-bottom:14px}
+.form-section-title{font-size:11px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--bdr)}
+.toggle-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.toggle{position:relative;width:40px;height:22px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;inset:0;background:#d1d5db;border-radius:20px;cursor:pointer;transition:.2s}
+.toggle-slider:before{content:'';position:absolute;width:16px;height:16px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+.toggle input:checked+.toggle-slider{background:var(--acc)}
+.toggle input:checked+.toggle-slider:before{transform:translateX(18px)}
+.toggle-label{font-size:13px;font-weight:600}
+.cond-group{background:#fff;border:1px solid var(--bdr);border-radius:7px;padding:12px;display:none}
+.cond-group.open{display:block}
+.cond-hint{font-size:11px;color:var(--txt2);background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 12px;margin-bottom:10px}
+.limits-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px}
+.limit-field{display:flex;flex-direction:column;gap:4px}
+.limit-field label{font-size:11px;font-weight:600;color:var(--txt2)}
+.limit-field input{padding:8px 10px;border:1px solid var(--bdr);border-radius:6px;font-size:13px;outline:none}
+.limit-field input:focus{border-color:var(--acc)}
+.warn-limit label{color:var(--warn)}.warn-limit input:focus{border-color:var(--warn)}
+.alert-limit label{color:var(--danger)}.alert-limit input:focus{border-color:var(--danger)}
+.add-log-btn{width:100%;padding:9px;border:2px dashed var(--bdr);border-radius:7px;background:transparent;color:var(--txt2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;margin-top:6px}
+.add-log-btn:hover{border-color:var(--acc);color:var(--acc);background:#eff6ff}
+.add-sec-btn{width:100%;padding:10px;border:2px dashed var(--bdr);border-radius:var(--r);background:transparent;color:var(--txt2);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;margin-top:8px}
+.add-sec-btn:hover{border-color:var(--acc);color:var(--acc);background:#eff6ff}
+.type-badge{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase}
+.type-numeric{background:#dbeafe;color:#1d4ed8}
+.type-status{background:#f3e8ff;color:#7c3aed}
+.type-cumulative{background:#dcfce7;color:#15803d}
+.cond-badge{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#fef3c7;color:#b45309;margin-left:4px}
+.opts-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.opt-item{display:flex;align-items:center;gap:4px;background:#f3f4f6;border-radius:6px;padding:4px 8px}
+.opt-item input{width:80px;border:1px solid var(--bdr);border-radius:4px;padding:3px 6px;font-size:12px}
+.opt-item select{border:1px solid var(--bdr);border-radius:4px;padding:3px 5px;font-size:11px}
+.opt-item button{background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px}
+.add-opt-btn{background:#e0e7ff;color:var(--acc2);border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer}
+.hint{font-size:11px;color:var(--txt2);background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 12px;margin-top:8px}
+.active-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;background:#dcfce7;color:var(--ok)}
+.inactive-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;background:#f3f4f6;color:var(--txt2)}
+.add-tmpl-btn{width:100%;padding:14px;border:2px dashed var(--acc);border-radius:var(--r);background:#eff6ff;color:var(--acc);font-size:14px;font-weight:700;cursor:pointer;transition:all .15s}
+.add-tmpl-btn:hover{background:#dbeafe}
+.toast{position:fixed;bottom:24px;right:24px;background:#1f2937;color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;opacity:0;transition:all .3s;pointer-events:none;z-index:999}
+.toast.show{opacity:1}
+.round-assign{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.round-assign-btn{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:2px solid var(--bdr);background:#fff;color:var(--txt2);transition:all .15s}
+.round-assign-btn.assigned{border-color:var(--acc);background:#e0e7ff;color:var(--acc2)}
+</style>
+</head>
+<body>
+
+<div class="auth-screen active" id="s-login">
+  <div class="auth-box">
+    <h1>Rounds Admin</h1>
+    <p>Sign in to access the admin panel</p>
+    <div class="auth-field"><label>Username</label><input type="text" id="a-user" placeholder="Username" autocomplete="username"></div>
+    <div class="auth-field"><label>Password</label><input type="password" id="a-pass" placeholder="Password" onkeydown="if(event.key==='Enter')doAdminLogin()"></div>
+    <div class="auth-err" id="a-err">Incorrect username or password — or no admin access</div>
+    <button class="auth-btn" onclick="doAdminLogin()">Sign In</button>
+  </div>
+</div>
+
+<div class="setpw-screen" id="s-setpw">
+  <div class="auth-box">
+    <h1>Create Password</h1>
+    <p>Set your password to get started</p>
+    <div class="auth-field"><label>New Password</label><input type="password" id="apw1" placeholder="At least 6 characters"></div>
+    <div class="auth-field"><label>Confirm Password</label><input type="password" id="apw2" placeholder="Repeat password" onkeydown="if(event.key==='Enter')doAdminSetPw()"></div>
+    <div class="auth-err" id="apw-err">Passwords don't match</div>
+    <button class="auth-btn" onclick="doAdminSetPw()">Set Password & Continue</button>
+  </div>
+</div>
+
+<div class="main-screen" id="s-main">
+  <div class="topbar">
+    <div>
+      <h1>Rounds Admin Panel</h1>
+      <div class="sub" id="admin-building-sub">Loading...</div>
+    </div>
+    <div class="topbar-right">
+      <button class="logout-admin" onclick="doAdminLogout()">Sign Out</button>
+      <button class="save-all" onclick="saveAll()">Save & Publish</button>
+    </div>
+  </div>
+  <div class="container">
+    <div class="panel">
+      <div class="panel-hdr"><h2>Settings</h2></div>
+      <div class="panel-body">
+        <div class="field-row">
+          <div class="field"><label>Building Name</label><input type="text" id="cfg-building" placeholder="e.g. 343 Sansome St."></div>
+          <div class="field"><label>Google Apps Script Webhook URL</label><input type="url" id="cfg-webhook" placeholder="Paste your Apps Script Web App URL here"></div>
+        </div>
+        <div class="field-row single">
+          <div class="field">
+            <label>Alert Email Recipients — press Enter after each address</label>
+            <div class="tag-input" id="email-tag-input" onclick="focusEmailInput()">
+              <input type="email" id="email-input" placeholder="Add email address..." onkeydown="handleEmailKey(event)">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-hdr">
+        <h2>Manage Users</h2>
+        <button class="btn btn-primary btn-sm" onclick="toggleAddUser()">+ Add User</button>
+      </div>
+      <div class="panel-body">
+        <table class="user-table">
+          <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Assigned Rounds</th><th>Actions</th></tr></thead>
+          <tbody id="user-tbody"></tbody>
+        </table>
+        <div class="add-user-form" id="add-user-form">
+          <div class="form-section-title" style="margin-bottom:12px">New User</div>
+          <div class="field-row three">
+            <div class="field"><label>Username</label><input type="text" id="new-username" placeholder="e.g. John"></div>
+            <div class="field"><label>Email Address</label><input type="email" id="new-email" placeholder="john@example.com"></div>
+            <div class="field"><label>Role</label>
+              <select id="new-role">
+                <option value="engineer">Engineer (field app only)</option>
+                <option value="admin">Admin (full access)</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-primary" onclick="addUser()">Create User</button>
+            <button class="btn btn-secondary" onclick="toggleAddUser()">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-hdr">
+        <h2>Round Templates</h2>
+        <span style="font-size:12px;color:var(--txt2)" id="tmpl-count"></span>
+      </div>
+      <div class="panel-body">
+        <div id="templates-container"></div>
+        <button class="add-tmpl-btn" onclick="addTemplate()">+ Create New Round Template</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+function hashPw(pw){let h=0;for(let i=0;i<pw.length;i++){h=((h<<5)-h)+pw.charCodeAt(i);h|=0;}return h.toString(36);}
+function getUsers(){return JSON.parse(localStorage.getItem('lc_users')||'[]');}
+function saveUsers(u){localStorage.setItem('lc_users',JSON.stringify(u));}
+function getConfig(){const s=localStorage.getItem('lc_admin_config');if(!s)return getDefaultConfig();try{const c=JSON.parse(s);if(!c.templates)c.templates=[];return c;}catch(e){return getDefaultConfig();}}
+function saveConfig(c){localStorage.setItem('lc_admin_config',JSON.stringify(c));}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+function showScreen(id){document.querySelectorAll('.auth-screen,.setpw-screen,.main-screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
+
+// AUTH
+function checkAdminSession(){
+  const users=getUsers();
+  if(users.length===0){users.push({username:'Scott',email:'smorris@metroservices.com',pwHash:null,forceReset:false,isAdmin:true,assignedRounds:'all'});saveUsers(users);}
+  const token=localStorage.getItem('lc_admin_session');
+  if(token){const user=users.find(u=>u.username===token);if(user&&user.isAdmin){enterAdmin(user);return;}}
+  showScreen('s-login');
+}
+function doAdminLogin(){
+  const username=document.getElementById('a-user').value.trim();
+  const password=document.getElementById('a-pass').value;
+  const users=getUsers();const user=users.find(u=>u.username===username);
+  const errEl=document.getElementById('a-err');
+  if(!user||!user.isAdmin){errEl.classList.add('show');return;}
+  if(!user.pwHash||user.forceReset){localStorage.setItem('lc_admin_pending',username);showScreen('s-setpw');return;}
+  if(hashPw(password)!==user.pwHash){errEl.classList.add('show');return;}
+  errEl.classList.remove('show');localStorage.setItem('lc_admin_session',username);enterAdmin(user);
+}
+function doAdminSetPw(){
+  const pw1=document.getElementById('apw1').value,pw2=document.getElementById('apw2').value;
+  const errEl=document.getElementById('apw-err');
+  if(pw1.length<6){errEl.textContent='Password must be at least 6 characters';errEl.classList.add('show');return;}
+  if(pw1!==pw2){errEl.textContent="Passwords don't match";errEl.classList.add('show');return;}
+  errEl.classList.remove('show');
+  const username=localStorage.getItem('lc_admin_pending');
+  const users=getUsers();const user=users.find(u=>u.username===username);
+  if(user){user.pwHash=hashPw(pw1);user.forceReset=false;}
+  saveUsers(users);localStorage.removeItem('lc_admin_pending');localStorage.setItem('lc_admin_session',username);enterAdmin(user);
+}
+function doAdminLogout(){localStorage.removeItem('lc_admin_session');showScreen('s-login');}
+function enterAdmin(user){
+  showScreen('s-main');
+  const cfg=getConfig();
+  document.getElementById('admin-building-sub').textContent=cfg.building||'Admin Panel';
+  document.getElementById('cfg-building').value=cfg.building||'';
+  document.getElementById('cfg-webhook').value=cfg.webhook||'';
+  renderEmailTags();renderUsers();renderTemplates();
+}
+
+// USERS
+function renderUsers(){
+  const users=getUsers();const cfg=getConfig();const templates=cfg.templates||[];
+  const tbody=document.getElementById('user-tbody');tbody.innerHTML='';
+  users.forEach(u=>{
+    const tr=document.createElement('tr');
+    const status=u.forceReset?'<span class="user-status status-reset">Reset Required</span>':'<span class="user-status status-active">Active</span>';
+    const role=u.isAdmin?'<span class="user-status status-admin">Admin</span>':'Engineer';
+    let assignedDisplay='';
+    if(u.assignedRounds==='all'){assignedDisplay='<span style="color:var(--ok);font-size:12px;font-weight:600">All Rounds</span>';}
+    else{const assigned=u.assignedRounds||[];assignedDisplay=templates.map(t=>`<button class="round-assign-btn ${assigned.includes(t.id)?'assigned':''}" onclick="toggleRoundAssign('${u.username}','${t.id}')">${t.name}</button>`).join('');}
+    tr.innerHTML=`<td><strong>${u.username}</strong></td><td style="font-size:12px;color:var(--txt2)">${u.email||'—'}</td><td>${role}</td><td>${status}</td>
+      <td><div class="round-assign">${assignedDisplay}<button class="round-assign-btn" style="border-style:dashed" onclick="toggleAllRounds('${u.username}')">${u.assignedRounds==='all'?'Restrict Access':'Grant All'}</button></div></td>
+      <td><div style="display:flex;gap:5px;flex-wrap:wrap">
+        ${!u.isAdmin?`<button class="btn btn-secondary btn-sm" onclick="makeAdmin('${u.username}')">Make Admin</button>`:`<button class="btn btn-secondary btn-sm" onclick="removeAdmin('${u.username}')">Remove Admin</button>`}
+        <button class="btn btn-warn btn-sm" onclick="forceReset('${u.username}')">Force Reset</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.username}')">Delete</button>
+      </div></td>`;
+    tbody.appendChild(tr);
+  });
+}
+function toggleAddUser(){document.getElementById('add-user-form').classList.toggle('open');}
+function addUser(){
+  const username=document.getElementById('new-username').value.trim();
+  const email=document.getElementById('new-email').value.trim();
+  const isAdmin=document.getElementById('new-role').value==='admin';
+  if(!username){showToast('Username is required');return;}
+  const users=getUsers();
+  if(users.find(u=>u.username===username)){showToast('Username already exists');return;}
+  users.push({username,email,pwHash:null,forceReset:false,isAdmin,assignedRounds:'all'});
+  saveUsers(users);document.getElementById('new-username').value='';document.getElementById('new-email').value='';
+  document.getElementById('add-user-form').classList.remove('open');renderUsers();showToast('User "'+username+'" created');
+}
+function forceReset(username){
+  if(!confirm('Force password reset for "'+username+'"?'))return;
+  const users=getUsers();const user=users.find(u=>u.username===username);
+  if(user){user.forceReset=true;user.pwHash=null;}saveUsers(users);renderUsers();showToast('Password reset forced');
+}
+function makeAdmin(username){const users=getUsers();const user=users.find(u=>u.username===username);if(user)user.isAdmin=true;saveUsers(users);renderUsers();showToast(username+' is now an admin');}
+function removeAdmin(username){
+  const users=getUsers();if(users.filter(u=>u.isAdmin).length<=1){showToast('Cannot remove the last admin');return;}
+  const user=users.find(u=>u.username===username);if(user)user.isAdmin=false;saveUsers(users);renderUsers();showToast(username+' is now a standard engineer');
+}
+function deleteUser(username){if(!confirm('Delete user "'+username+'"?'))return;saveUsers(getUsers().filter(u=>u.username!==username));renderUsers();showToast('User deleted');}
+function toggleRoundAssign(username,templateId){
+  const users=getUsers();const user=users.find(u=>u.username===username);if(!user)return;
+  if(user.assignedRounds==='all')user.assignedRounds=[];
+  const idx=user.assignedRounds.indexOf(templateId);
+  if(idx===-1)user.assignedRounds.push(templateId);else user.assignedRounds.splice(idx,1);
+  saveUsers(users);renderUsers();
+}
+function toggleAllRounds(username){const users=getUsers();const user=users.find(u=>u.username===username);if(!user)return;user.assignedRounds=user.assignedRounds==='all'?[]:'all';saveUsers(users);renderUsers();}
+
+// EMAIL TAGS
+let config=getConfig();
+function renderEmailTags(){
+  config=getConfig();const container=document.getElementById('email-tag-input');const input=document.getElementById('email-input');
+  container.querySelectorAll('.tag').forEach(t=>t.remove());
+  (config.alertEmails||[]).forEach((email,i)=>{const tag=document.createElement('div');tag.className='tag';tag.innerHTML=email+'<button onclick="removeEmail('+i+')">×</button>';container.insertBefore(tag,input);});
+}
+function focusEmailInput(){document.getElementById('email-input').focus();}
+function handleEmailKey(e){if(e.key==='Enter'||e.key===','){e.preventDefault();const val=e.target.value.trim().replace(',','');if(val&&val.includes('@')){config=getConfig();if(!config.alertEmails)config.alertEmails=[];config.alertEmails.push(val);saveConfig(config);e.target.value='';renderEmailTags();}}}
+function removeEmail(i){config=getConfig();config.alertEmails.splice(i,1);saveConfig(config);renderEmailTags();}
+
+// ============================================================
+// DRAG AND DROP STATE
+// ============================================================
+let dragState={type:null,tmplId:null,secName:null,logId:null,el:null};
+
+function initSectionDrag(el,tmplId,secName){
+  el.setAttribute('draggable','true');
+  el.addEventListener('dragstart',e=>{
+    dragState={type:'section',tmplId,secName,el};
+    el.classList.add('dragging');
+    e.dataTransfer.effectAllowed='move';
+  });
+  el.addEventListener('dragend',()=>el.classList.remove('dragging'));
+  el.addEventListener('dragover',e=>{
+    e.preventDefault();
+    if(dragState.type==='section'&&dragState.tmplId===tmplId&&dragState.secName!==secName){
+      el.classList.add('drag-over');
+    }
+  });
+  el.addEventListener('dragleave',()=>el.classList.remove('drag-over'));
+  el.addEventListener('drop',e=>{
+    e.preventDefault();el.classList.remove('drag-over');
+    if(dragState.type==='section'&&dragState.tmplId===tmplId&&dragState.secName!==secName){
+      dropSection(tmplId,dragState.secName,secName);
+    }
+  });
+}
+
+function initLogDrag(el,tmplId,logId,secName){
+  el.setAttribute('draggable','true');
+  el.addEventListener('dragstart',e=>{
+    dragState={type:'log',tmplId,logId,secName,el};
+    el.classList.add('dragging');
+    e.dataTransfer.effectAllowed='move';
+    e.stopPropagation();
+  });
+  el.addEventListener('dragend',()=>el.classList.remove('dragging'));
+  el.addEventListener('dragover',e=>{
+    e.preventDefault();e.stopPropagation();
+    if(dragState.type==='log'&&dragState.tmplId===tmplId&&dragState.logId!==logId){
+      el.classList.add('drag-over');
+    }
+  });
+  el.addEventListener('dragleave',()=>el.classList.remove('drag-over'));
+  el.addEventListener('drop',e=>{
+    e.preventDefault();e.stopPropagation();el.classList.remove('drag-over');
+    if(dragState.type==='log'&&dragState.tmplId===tmplId&&dragState.logId!==logId){
+      dropLog(tmplId,dragState.logId,logId);
+    }
+  });
+}
+
+function dropSection(tmplId,fromSecName,toSecName){
+  const cfg=getConfig();const tmpl=cfg.templates.find(t=>t.id===tmplId);if(!tmpl)return;
+  // Reorder logs by section order
+  const sections=getSections(tmpl);
+  const fromIdx=sections.indexOf(fromSecName);const toIdx=sections.indexOf(toSecName);
+  if(fromIdx===-1||toIdx===-1)return;
+  // Rebuild logs array with sections in new order
+  sections.splice(fromIdx,1);sections.splice(toIdx,0,fromSecName);
+  const newLogs=[];
+  sections.forEach(sec=>newLogs.push(...tmpl.logs.filter(l=>l.sec===sec)));
+  tmpl.logs=newLogs;
+  saveConfig(cfg);renderSections(tmplId);showToast('Section moved');
+}
+
+function dropLog(tmplId,fromLogId,toLogId){
+  const cfg=getConfig();const tmpl=cfg.templates.find(t=>t.id===tmplId);if(!tmpl)return;
+  const fromIdx=tmpl.logs.findIndex(l=>l.id===fromLogId);
+  const toIdx=tmpl.logs.findIndex(l=>l.id===toLogId);
+  if(fromIdx===-1||toIdx===-1)return;
+  const [moved]=tmpl.logs.splice(fromIdx,1);
+  tmpl.logs.splice(toIdx,0,moved);
+  saveConfig(cfg);
+  const secName=moved.sec;
+  const secId='sec_'+tmplId+'_'+btoa(secName).replace(/=/g,'');
+  renderLogs(tmplId,secName,secId);
+  showToast('Log point moved');
+}
+
+// TEMPLATES
+function renderTemplates(){
+  config=getConfig();const container=document.getElementById('templates-container');container.innerHTML='';
+  const templates=config.templates||[];
+  document.getElementById('tmpl-count').textContent=templates.length+' template'+(templates.length!==1?'s':'');
+  templates.forEach(tmpl=>{
+    const div=document.createElement('div');div.className='panel';div.id='tmpl-'+tmpl.id;div.style.marginBottom='14px';
+    const activeBadge=tmpl.active?'<span class="active-badge">Active</span>':'<span class="inactive-badge">Inactive</span>';
+    div.innerHTML=`
+      <div class="panel-hdr" style="cursor:pointer" onclick="toggleTemplate('${tmpl.id}')">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px"><span style="font-size:15px;font-weight:700">${tmpl.name}</span>${activeBadge}</div>
+          <div style="font-size:12px;color:var(--txt2);margin-top:2px">${tmpl.description||''} · ${(tmpl.logs||[]).length} log points · Sheet tab: ${tmpl.sheetTab||tmpl.name}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center" onclick="event.stopPropagation()">
+          <button class="btn btn-secondary btn-sm" onclick="toggleTemplateActive('${tmpl.id}')">${tmpl.active?'Deactivate':'Activate'}</button>
+          <button class="btn btn-secondary btn-sm" onclick="editTemplateInfo('${tmpl.id}')">Edit Info</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteTemplate('${tmpl.id}')">Delete</button>
+          <span style="color:var(--txt2);font-size:12px">▼</span>
+        </div>
+      </div>
+      <div style="display:none;padding:16px" id="tmplbody-${tmpl.id}">
+        <div id="secs-${tmpl.id}"></div>
+        <button class="add-sec-btn" onclick="addSection('${tmpl.id}')">+ Add Section</button>
+      </div>`;
+    container.appendChild(div);renderSections(tmpl.id);
+  });
+}
+
+function toggleTemplate(tmplId){const body=document.getElementById('tmplbody-'+tmplId);body.style.display=body.style.display==='none'?'block':'none';}
+function toggleTemplateActive(tmplId){config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(tmpl)tmpl.active=!tmpl.active;saveConfig(config);renderTemplates();renderUsers();}
+function editTemplateInfo(tmplId){
+  config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;
+  const name=prompt('Round template name:',tmpl.name);if(name===null)return;
+  const desc=prompt('Description:',tmpl.description||'');
+  const tab=prompt('Google Sheet tab name:',tmpl.sheetTab||tmpl.name);
+  tmpl.name=name.trim()||tmpl.name;tmpl.description=desc||'';tmpl.sheetTab=tab||tmpl.name;
+  saveConfig(config);renderTemplates();
+}
+function deleteTemplate(tmplId){
+  config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);
+  if(!confirm('Delete template "'+tmpl.name+'"?'))return;
+  config.templates=config.templates.filter(t=>t.id!==tmplId);saveConfig(config);renderTemplates();
+}
+function addTemplate(){
+  const name=prompt('New round template name:');if(!name||!name.trim())return;
+  const desc=prompt('Description:','');const tab=prompt('Google Sheet tab name:',name.trim());
+  config=getConfig();config.templates.push({id:'tmpl_'+Date.now(),name:name.trim(),description:desc||'',sheetTab:tab||name.trim(),active:true,logs:[]});
+  saveConfig(config);renderTemplates();renderUsers();showToast('Template "'+name.trim()+'" created');
+}
+
+// SECTIONS
+function renderSections(tmplId){
+  config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;
+  const container=document.getElementById('secs-'+tmplId);if(!container)return;
+  container.innerHTML='';
+  const sections=getSections(tmpl);
+  sections.forEach(secName=>{
+    const secLogs=(tmpl.logs||[]).filter(l=>l.sec===secName);
+    const block=document.createElement('div');block.className='section-block';
+    const secId='sec_'+tmplId+'_'+btoa(secName).replace(/=/g,'');
+    block.innerHTML=`
+      <div class="sec-hdr">
+        <span class="drag-handle" title="Drag to reorder section">⠿</span>
+        <span class="sec-name" onclick="toggleSec('${secId}')">${secName}</span>
+        <span class="sec-count">${secLogs.length} logs</span>
+        <div class="sec-controls">
+          <button class="btn btn-secondary btn-sm" onclick="renameSec('${tmplId}','${secName}')">Rename</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteSec('${tmplId}','${secName}')">Delete</button>
+        </div>
+        <span class="chevron" onclick="toggleSec('${secId}')">▼</span>
+      </div>
+      <div class="sec-body" id="${secId}">
+        <div id="logs_${secId}"></div>
+        <button class="add-log-btn" onclick="addLog('${tmplId}','${secName}')">+ Add Log Point</button>
+      </div>`;
+    container.appendChild(block);
+    // Wire up section drag
+    initSectionDrag(block,tmplId,secName);
+    renderLogs(tmplId,secName,secId);
+  });
+}
+
+function getSections(tmpl){const seen=new Set();const order=[];(tmpl.logs||[]).forEach(l=>{if(!seen.has(l.sec)){seen.add(l.sec);order.push(l.sec);}});return order;}
+function toggleSec(secId){document.getElementById(secId).classList.toggle('open');const hdr=document.querySelector(`#${secId}`);const secBlock=hdr?hdr.closest('.section-block'):null;if(secBlock){const sh=secBlock.querySelector('.sec-hdr');if(sh)sh.classList.toggle('open');}}
+function renameSec(tmplId,oldName){const newName=prompt('Rename section:',oldName);if(!newName||!newName.trim()||newName.trim()===oldName)return;config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(tmpl)(tmpl.logs||[]).forEach(l=>{if(l.sec===oldName)l.sec=newName.trim();});saveConfig(config);renderSections(tmplId);}
+function deleteSec(tmplId,secName){if(!confirm('Delete section "'+secName+'" and all its logs?'))return;config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(tmpl)tmpl.logs=(tmpl.logs||[]).filter(l=>l.sec!==secName);saveConfig(config);renderSections(tmplId);}
+function addSection(tmplId){
+  const name=prompt('New section name:');if(!name||!name.trim())return;
+  config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;if(!tmpl.logs)tmpl.logs=[];
+  tmpl.logs.push({id:'log_'+Date.now(),sec:name.trim(),name:'New Log Point',desc:'',type:'numeric',unit:'',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''});
+  saveConfig(config);renderSections(tmplId);showToast('Section "'+name.trim()+'" added');
+}
+
+// LOGS
+function renderLogs(tmplId,secName,secId){
+  config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;
+  const container=document.getElementById('logs_'+secId);if(!container)return;
+  container.innerHTML='';
+  const secLogs=(tmpl.logs||[]).filter(l=>l.sec===secName);
+  secLogs.forEach(log=>{
+    const item=document.createElement('div');item.className='log-item';item.id='logitem_'+log.id;
+    const typeKey=log.type==='status'?'status':log.cumulative?'cumulative':'numeric';
+    const typeBadge=`<span class="type-badge type-${typeKey}">${typeKey}</span>`;
+    const condBadge=log.condEnabled?`<span class="cond-badge">conditional</span>`:'';
+    let condDesc='';
+    if(log.condEnabled&&log.condTrigger){const trigLog=(tmpl.logs||[]).find(l=>l.id===log.condTrigger);if(trigLog)condDesc=`<span style="font-size:10px;color:var(--txt2);margin-left:6px">if ${trigLog.name} = ${log.condValue}</span>`;}
+    item.innerHTML=`
+      <div class="log-item-hdr">
+        <span class="drag-handle" title="Drag to reorder">⠿</span>
+        <span class="log-item-name" onclick="toggleLogForm('${log.id}')">${log.name}</span>
+        ${typeBadge}${condBadge}${condDesc}
+        <span class="log-item-meta">${log.unit||''}</span>
+        <div class="item-controls">
+          <button class="btn btn-danger btn-sm" onclick="deleteLog('${tmplId}','${log.id}')">Delete</button>
+        </div>
+      </div>
+      <div class="log-form" id="lform_${log.id}">${buildLogForm(log,tmplId)}</div>`;
+    container.appendChild(item);
+    // Wire up log drag
+    initLogDrag(item,tmplId,log.id,secName);
+  });
+}
+
+function buildLogForm(log,tmplId){
+  config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);
+  const otherLogs=(tmpl?tmpl.logs||[]:[]).filter(l=>l.id!==log.id&&l.type==='status');
+  const triggerOptions=otherLogs.map(l=>`<option value="${l.id}" ${log.condTrigger===l.id?'selected':''}>${l.sec} → ${l.name}</option>`).join('');
+  const triggerLog=otherLogs.find(l=>l.id===log.condTrigger);
+  const triggerOpts=(triggerLog&&triggerLog.opts)||[];
+  const valueOptions=triggerOpts.map(o=>{const label=typeof o==='object'?o.label:o;return`<option value="${label}" ${log.condValue===label?'selected':''}>${label}</option>`;}).join('');
+  const opts=(log.opts||[]);
+  const optsHtml=opts.map((o,i)=>{const label=typeof o==='object'?o.label:o;const style=typeof o==='object'?o.style:'';return`<div class="opt-item"><input type="text" value="${label}" placeholder="Label" onchange="updateOptLabel('${tmplId}','${log.id}',${i},this.value)"><select onchange="updateOptStyle('${tmplId}','${log.id}',${i},this.value)"><option value="" ${style===''?'selected':''}>Normal</option><option value="ok" ${style==='ok'?'selected':''}>OK (green)</option><option value="warn" ${style==='warn'?'selected':''}>Warning (orange)</option><option value="alarm" ${style==='alarm'?'selected':''}>Alarm (red)</option></select><button onclick="removeOpt('${tmplId}','${log.id}',${i})">×</button></div>`;}).join('');
+  return`
+    <div class="form-section">
+      <div class="form-section-title">Basic Info</div>
+      <div class="field-row"><div class="field"><label>Log Name</label><input type="text" value="${log.name}" onchange="updateLog('${tmplId}','${log.id}','name',this.value)"></div><div class="field"><label>Unit / Label</label><input type="text" value="${log.unit||''}" placeholder="PSI, °F, VDC..." onchange="updateLog('${tmplId}','${log.id}','unit',this.value)"></div></div>
+      <div class="field-row single"><div class="field"><label>Description (shown on mobile)</label><textarea onchange="updateLog('${tmplId}','${log.id}','desc',this.value)">${log.desc||''}</textarea></div></div>
+      <div class="field-row three">
+        <div class="field"><label>Data Type</label><select onchange="updateLogType('${tmplId}','${log.id}',this.value)"><option value="numeric" ${log.type!=='status'?'selected':''}>Numeric</option><option value="status" ${log.type==='status'?'selected':''}>Status (tap buttons)</option></select></div>
+        <div class="field"><label>Cumulative?</label><select onchange="updateLog('${tmplId}','${log.id}','cumulative',this.value==='true')"><option value="false" ${!log.cumulative?'selected':''}>No — point-in-time</option><option value="true" ${log.cumulative?'selected':''}>Yes — running total</option></select></div>
+      </div>
+    </div>
+    ${log.type==='status'?`<div class="form-section"><div class="form-section-title">Status Options</div><div class="opts-list" id="opts_${log.id}">${optsHtml}</div><button class="add-opt-btn" style="margin-top:8px" onclick="addOpt('${tmplId}','${log.id}')">+ Add Option</button></div>`:`
+    <div class="form-section">
+      <div class="form-section-title">Limits & Alerts</div>
+      <div class="hint">Warning limits highlight red and require Acknowledge. Alert limits also send email.</div>
+      <div class="limits-grid" style="margin-top:10px">
+        <div class="limit-field warn-limit"><label>Warn Low</label><input type="number" value="${log.warnLo||''}" placeholder="—" onchange="updateLog('${tmplId}','${log.id}','warnLo',this.value)"></div>
+        <div class="limit-field warn-limit"><label>Warn High</label><input type="number" value="${log.warnHi||''}" placeholder="—" onchange="updateLog('${tmplId}','${log.id}','warnHi',this.value)"></div>
+        <div class="limit-field alert-limit"><label>Alert Low (email)</label><input type="number" value="${log.alertLo||''}" placeholder="—" onchange="updateLog('${tmplId}','${log.id}','alertLo',this.value)"></div>
+        <div class="limit-field alert-limit"><label>Alert High (email)</label><input type="number" value="${log.alertHi||''}" placeholder="—" onchange="updateLog('${tmplId}','${log.id}','alertHi',this.value)"></div>
+      </div>
+    </div>`}
+    <div class="form-section">
+      <div class="form-section-title">Conditional Logic</div>
+      <div class="toggle-row">
+        <label class="toggle"><input type="checkbox" ${log.condEnabled?'checked':''} onchange="toggleLogCond('${tmplId}','${log.id}',this.checked)"><span class="toggle-slider"></span></label>
+        <span class="toggle-label">Only show when another log equals a specific value</span>
+      </div>
+      <div class="cond-group ${log.condEnabled?'open':''}" id="condgrp_${log.id}">
+        <div class="cond-hint">Only status-type logs can be triggers. The trigger log must appear before this one.</div>
+        <div class="field-row">
+          <div class="field"><label>Show when...</label><select onchange="updateCondTrigger('${tmplId}','${log.id}',this.value)"><option value="">— Select trigger log —</option>${triggerOptions}</select></div>
+          <div class="field"><label>...equals</label><select id="condval_${log.id}" onchange="updateLog('${tmplId}','${log.id}','condValue',this.value)"><option value="">— Select value —</option>${valueOptions}</select></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-success" onclick="saveLog('${tmplId}','${log.id}')">Save Changes</button>
+      <button class="btn btn-secondary" onclick="toggleLogForm('${log.id}')">Cancel</button>
+    </div>`;
+}
+
+function toggleLogForm(logId){document.getElementById('lform_'+logId).classList.toggle('open');}
+function updateLog(tmplId,logId,field,value){config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;const log=(tmpl.logs||[]).find(l=>l.id===logId);if(log)log[field]=value;saveConfig(config);}
+function updateLogType(tmplId,logId,value){
+  config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;
+  const log=(tmpl.logs||[]).find(l=>l.id===logId);if(!log)return;
+  log.type=value;if(value==='status'&&(!log.opts||log.opts.length===0))log.opts=[{label:'OK',style:'ok'},{label:'Fault',style:'alarm'}];
+  if(value!=='status')(tmpl.logs||[]).forEach(l=>{if(l.condTrigger===logId){l.condTrigger='';l.condValue='';l.condEnabled=false;}});
+  saveConfig(config);const secId='sec_'+tmplId+'_'+btoa(log.sec).replace(/=/g,'');renderLogs(tmplId,log.sec,secId);
+  setTimeout(()=>document.getElementById('lform_'+logId).classList.add('open'),50);
+}
+function updateOptLabel(tmplId,logId,i,val){config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;const log=(tmpl.logs||[]).find(l=>l.id===logId);if(log){if(typeof log.opts[i]==='string')log.opts[i]={label:val,style:''};else log.opts[i].label=val;}saveConfig(config);}
+function updateOptStyle(tmplId,logId,i,val){config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;const log=(tmpl.logs||[]).find(l=>l.id===logId);if(log){if(typeof log.opts[i]==='string')log.opts[i]={label:log.opts[i],style:val};else log.opts[i].style=val;}saveConfig(config);}
+function removeOpt(tmplId,logId,i){config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;const log=(tmpl.logs||[]).find(l=>l.id===logId);if(log)log.opts.splice(i,1);saveConfig(config);const secId='sec_'+tmplId+'_'+btoa(log.sec).replace(/=/g,'');renderLogs(tmplId,log.sec,secId);setTimeout(()=>document.getElementById('lform_'+logId).classList.add('open'),50);}
+function addOpt(tmplId,logId){config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;const log=(tmpl.logs||[]).find(l=>l.id===logId);if(log)log.opts.push({label:'New Option',style:''});saveConfig(config);const secId='sec_'+tmplId+'_'+btoa(log.sec).replace(/=/g,'');renderLogs(tmplId,log.sec,secId);setTimeout(()=>document.getElementById('lform_'+logId).classList.add('open'),50);}
+function toggleLogCond(tmplId,logId,checked){config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;const log=(tmpl.logs||[]).find(l=>l.id===logId);if(log)log.condEnabled=checked;saveConfig(config);const secId='sec_'+tmplId+'_'+btoa(log.sec).replace(/=/g,'');renderLogs(tmplId,log.sec,secId);setTimeout(()=>document.getElementById('lform_'+logId).classList.add('open'),50);}
+function updateCondTrigger(tmplId,logId,triggerId){
+  config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;
+  const log=(tmpl.logs||[]).find(l=>l.id===logId);if(!log)return;log.condTrigger=triggerId;log.condValue='';
+  const triggerLog=(tmpl.logs||[]).find(l=>l.id===triggerId);
+  const sel=document.getElementById('condval_'+logId);
+  if(sel&&triggerLog){sel.innerHTML='<option value="">— Select value —</option>'+(triggerLog.opts||[]).map(o=>{const label=typeof o==='object'?o.label:o;return`<option value="${label}">${label}</option>`;}).join('');}
+  saveConfig(config);
+}
+function saveLog(tmplId,logId){showToast('Log point saved');document.getElementById('lform_'+logId).classList.remove('open');config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;const log=(tmpl.logs||[]).find(l=>l.id===logId);if(!log)return;const secId='sec_'+tmplId+'_'+btoa(log.sec).replace(/=/g,'');renderLogs(tmplId,log.sec,secId);}
+function addLog(tmplId,secName){
+  config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;if(!tmpl.logs)tmpl.logs=[];
+  const newLog={id:'log_'+Date.now(),sec:secName,name:'New Log Point',desc:'',type:'numeric',unit:'',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''};
+  tmpl.logs.push(newLog);saveConfig(config);
+  const secId='sec_'+tmplId+'_'+btoa(secName).replace(/=/g,'');
+  renderLogs(tmplId,secName,secId);
+  setTimeout(()=>{const el=document.getElementById('lform_'+newLog.id);if(el){el.classList.add('open');el.scrollIntoView({behavior:'smooth',block:'center'});}},80);
+}
+function deleteLog(tmplId,logId){
+  config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;
+  const log=(tmpl.logs||[]).find(l=>l.id===logId);if(!confirm('Delete "'+log.name+'"?'))return;
+  const secName=log.sec;
+  (tmpl.logs||[]).forEach(l=>{if(l.condTrigger===logId){l.condTrigger='';l.condValue='';l.condEnabled=false;}});
+  tmpl.logs=tmpl.logs.filter(l=>l.id!==logId);saveConfig(config);
+  const secId='sec_'+tmplId+'_'+btoa(secName).replace(/=/g,'');renderLogs(tmplId,secName,secId);
+}
+
+// SAVE ALL
+function saveAll(){
+  config=getConfig();config.building=document.getElementById('cfg-building').value;config.webhook=document.getElementById('cfg-webhook').value;
+  saveConfig(config);localStorage.setItem('lc_sheet_url',config.webhook);localStorage.setItem('lc_alert_emails',JSON.stringify(config.alertEmails||[]));
+  localStorage.setItem('lc_eng',JSON.stringify(getUsers().map(u=>u.username)));
+  document.getElementById('admin-building-sub').textContent=config.building||'Admin Panel';
+  showToast('✓ Saved and published to mobile app');renderTemplates();renderUsers();
+}
+
+// DEFAULT CONFIG
+function getDefaultConfig(){
+  return{building:'343 Sansome St.',webhook:'',alertEmails:['smorris@metroservices.com'],templates:[{id:'tmpl_daily',name:'Daily Rounds',description:'Standard daily building rounds',sheetTab:'Daily Rounds',active:true,logs:[
+    {id:'fcr_alarms',sec:'Fire Control Room',name:'Alarms',desc:'Check panel for any active alarms',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Active',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'fcr_troubles',sec:'Fire Control Room',name:'Troubles',desc:'Check panel for trouble conditions',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Active',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'fcr_supervisory',sec:'Fire Control Room',name:'Supervisory',desc:'Check supervisory conditions',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Active',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'fcr_stairwell',sec:'Fire Control Room',name:'Stairwell Door Locks',desc:'Verify all stairwell doors secured',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Fault',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'fcr_printer',sec:'Fire Control Room',name:'Printer Status',desc:'Check panel printer',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Fault',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'fcr_fan',sec:'Fire Control Room',name:'Fan-Damper Panel',desc:'Verify fan-damper panel status',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Fault',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'fcr_online',sec:'Fire Control Room',name:'Online / Offline',desc:'Panel network connectivity status',type:'status',unit:'',cumulative:false,opts:[{label:'Online',style:'ok'},{label:'Offline',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'fcr_co2',sec:'Fire Control Room',name:'CO2 Alarms (1-13)',desc:'Check all 13 CO2 detector zones',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Active',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dfp_status',sec:'Diesel Fire Pump',name:'On/Off/Auto Status',desc:'Controller selector switch position',type:'status',unit:'',cumulative:false,opts:[{label:'Auto',style:'ok'},{label:'On',style:'warn'},{label:'Off',style:''}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dfp_bat1',sec:'Diesel Fire Pump',name:'Battery #1 VDC',desc:'Normal range: 12–14 VDC',type:'numeric',unit:'VDC',cumulative:false,opts:[],warnLo:'11.5',warnHi:'14.5',alertLo:'11',alertHi:'15',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dfp_bat2',sec:'Diesel Fire Pump',name:'Battery #2 VDC',desc:'Normal range: 12–14 VDC',type:'numeric',unit:'VDC',cumulative:false,opts:[],warnLo:'11.5',warnHi:'14.5',alertLo:'11',alertHi:'15',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dfp_stand',sec:'Diesel Fire Pump',name:'Standpipe Pressure',desc:'Read gauge on pump panel',type:'numeric',unit:'PSI',cumulative:false,opts:[],warnLo:'195',warnHi:'220',alertLo:'180',alertHi:'240',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dfp_water',sec:'Diesel Fire Pump',name:'Water Level',desc:'Check sight glass',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Low',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dfp_oil',sec:'Diesel Fire Pump',name:'Oil Level',desc:'Check dipstick',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Low',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dfp_hours',sec:'Diesel Fire Pump',name:'Hours',desc:'Cumulative engine hours',type:'numeric',unit:'hrs',cumulative:true,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dfp_crank',sec:'Diesel Fire Pump',name:'Crankcase Heater',desc:'Read thermometer on crankcase',type:'numeric',unit:'°F',cumulative:false,opts:[],warnLo:'120',warnHi:'150',alertLo:'100',alertHi:'170',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dfp_fuel',sec:'Diesel Fire Pump',name:'Day Tank Fuel Level',desc:'Read sight glass on day tank',type:'status',unit:'',cumulative:false,opts:[{label:'7/8',style:'ok'},{label:'3/4',style:'ok'},{label:'1/2',style:'warn'},{label:'1/4',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'efp_status',sec:'Electric Fire Pump',name:'Status / Auto',desc:'Controller selector switch position',type:'status',unit:'',cumulative:false,opts:[{label:'Auto',style:'ok'},{label:'On',style:'warn'},{label:'Off',style:''}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'jp_status',sec:'Jockey Pump',name:'Status (Auto)',desc:'Verify jockey pump in auto',type:'status',unit:'',cumulative:false,opts:[{label:'Auto',style:'ok'},{label:'On',style:'warn'},{label:'Off',style:''}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'jp_suc',sec:'Jockey Pump',name:'Press. Diff — Suction',desc:'Suction side pressure gauge',type:'numeric',unit:'PSI',cumulative:false,opts:[],warnLo:'60',warnHi:'85',alertLo:'50',alertHi:'95',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'jp_dis',sec:'Jockey Pump',name:'Press. Diff — Discharge',desc:'Discharge side pressure gauge',type:'numeric',unit:'PSI',cumulative:false,opts:[],warnLo:'175',warnHi:'210',alertLo:'160',alertHi:'225',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dw_status',sec:'Domestic Water',name:'Status On/Auto',desc:'Lead pump controller position',type:'status',unit:'',cumulative:false,opts:[{label:'Hand-2',style:'ok'},{label:'Auto',style:'ok'},{label:'Off',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dw_lead',sec:'Domestic Water',name:'Lead Pump #',desc:'Which pump is currently lead',type:'status',unit:'',cumulative:false,opts:[{label:'#1',style:''},{label:'#2',style:''}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dw_freq',sec:'Domestic Water',name:'Pump Frequency',desc:'Read VFD display',type:'numeric',unit:'Hz',cumulative:false,opts:[],warnLo:'40',warnHi:'60',alertLo:'30',alertHi:'65',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dw_amp',sec:'Domestic Water',name:'Pump Amperage',desc:'Read VFD display or panel meter',type:'numeric',unit:'A',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dw_suc',sec:'Domestic Water',name:'Suction Pressure',desc:'Gauge left of pump — normal 62 PSI',type:'numeric',unit:'PSI',cumulative:false,opts:[],warnLo:'55',warnHi:'70',alertLo:'45',alertHi:'80',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'dw_dis',sec:'Domestic Water',name:'Discharge Pressure',desc:'Gauge right of pump — normal 132 PSI',type:'numeric',unit:'PSI',cumulative:false,opts:[],warnLo:'120',warnHi:'140',alertLo:'110',alertHi:'155',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'sump',sec:'Sewer / Storm',name:'Sump Pumps',desc:'Check pit level and pump operation',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'#1 Off',style:'warn'},{label:'#2 Off',style:'warn'},{label:'Both Off',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'storm',sec:'Sewer / Storm',name:'Storm Pumps',desc:'Check storm ejection pump status',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Fault',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'h2o1',sec:'Meters',name:'H2O Meter #1',desc:'Cumulative gallons — read totalizer',type:'numeric',unit:'gal',cumulative:true,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'h2o2',sec:'Meters',name:'H2O Meter #2',desc:'Cumulative gallons — read totalizer',type:'numeric',unit:'gal',cumulative:true,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'ada',sec:'ADA / Elevator',name:'ADA Lift Inspection',desc:'Test operation and check for faults',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Down',style:'alarm'},{label:'Service',style:'warn'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'ct_fc',sec:'Cooling Towers',name:'Free Cooling Status',desc:'Heat exchanger bypass valve position',type:'status',unit:'',cumulative:false,opts:[{label:'On',style:'ok'},{label:'Off',style:''}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'ct_hx1',sec:'Cooling Towers',name:'Heat Exchanger Temp',desc:'Supply temp — read thermometer on HX',type:'numeric',unit:'°F',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:true,condTrigger:'ct_fc',condValue:'On'},
+    {id:'ct_chwp',sec:'Cooling Towers',name:'CHWP (#1 or #2)',desc:'Which chilled water pump is running',type:'status',unit:'',cumulative:false,opts:[{label:'#1',style:''},{label:'#2',style:''}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:true,condTrigger:'ct_fc',condValue:'On'},
+    {id:'ct_chwp_dp',sec:'Cooling Towers',name:'CHWP Delta-P',desc:'Differential pressure gauge — normal 95–125',type:'numeric',unit:'PSI',cumulative:false,opts:[],warnLo:'95',warnHi:'125',alertLo:'80',alertHi:'140',condEnabled:true,condTrigger:'ct_fc',condValue:'On'},
+    {id:'ct_ctwp',sec:'Cooling Towers',name:'CTWP (#1 or #2)',desc:'Which condenser water pump is running',type:'status',unit:'',cumulative:false,opts:[{label:'#1',style:''},{label:'#2',style:''}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:true,condTrigger:'ct_fc',condValue:'On'},
+    {id:'ct_ctwp_dp',sec:'Cooling Towers',name:'CTWP Delta-P',desc:'Differential pressure gauge — normal 85–130',type:'numeric',unit:'PSI',cumulative:false,opts:[],warnLo:'85',warnHi:'130',alertLo:'70',alertHi:'145',condEnabled:true,condTrigger:'ct_fc',condValue:'On'},
+    {id:'ct_hx2',sec:'Cooling Towers',name:'Heat Exchanger Return Temp',desc:'Return temp — read thermometer on HX',type:'numeric',unit:'°F',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:true,condTrigger:'ct_fc',condValue:'On'},
+    {id:'ct_tds',sec:'Cooling Towers',name:'Tower TDS',desc:'Read TDS meter at tower basin',type:'numeric',unit:'ppm',cumulative:false,opts:[],warnLo:'',warnHi:'1200',alertLo:'',alertHi:'1500',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'ct_bleed',sec:'Cooling Towers',name:'Bleed Water Meter',desc:'Cumulative bleed gallons',type:'numeric',unit:'gal',cumulative:true,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'ct_makeup',sec:'Cooling Towers',name:'Make-Up Meter',desc:'Cumulative make-up water gallons',type:'numeric',unit:'gal',cumulative:true,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'a3_a',sec:'3,000 Amp Main',name:'Phase-A',desc:'Read Phase A ammeter on main panel',type:'numeric',unit:'A',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'a3_b',sec:'3,000 Amp Main',name:'Phase-B',desc:'Read Phase B ammeter on main panel',type:'numeric',unit:'A',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'a3_c',sec:'3,000 Amp Main',name:'Phase-C',desc:'Read Phase C ammeter on main panel',type:'numeric',unit:'A',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'a3_dig',sec:'3,000 Amp Main',name:'Digital',desc:'Read digital kWh meter display',type:'numeric',unit:'kWh',cumulative:true,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'a3_ana',sec:'3,000 Amp Main',name:'Analog',desc:'Read analog kWh meter display',type:'numeric',unit:'kWh',cumulative:true,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'a2_a',sec:'2,000 Amp Main',name:'Phase-A',desc:'Read Phase A ammeter',type:'numeric',unit:'A',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'a2_b',sec:'2,000 Amp Main',name:'Phase-B',desc:'Read Phase B ammeter',type:'numeric',unit:'A',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'a2_c',sec:'2,000 Amp Main',name:'Phase-C',desc:'Read Phase C ammeter',type:'numeric',unit:'A',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'a2_dig',sec:'2,000 Amp Main',name:'Digital — Difference',desc:'Read digital meter difference display',type:'numeric',unit:'kWh',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'a2_ana',sec:'2,000 Amp Main',name:'Analog — Difference',desc:'Read analog meter difference display',type:'numeric',unit:'kWh',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'gen_status',sec:'Emergency Generator',name:'On/Off/Auto Status',desc:'Controller selector switch position',type:'status',unit:'',cumulative:false,opts:[{label:'Auto',style:'ok'},{label:'On',style:'warn'},{label:'Off',style:''}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'gen_bat',sec:'Emergency Generator',name:'Battery #1 28VDC',desc:'Normal range: 26–30 VDC',type:'numeric',unit:'VDC',cumulative:false,opts:[],warnLo:'26',warnHi:'30',alertLo:'24',alertHi:'32',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'gen_water',sec:'Emergency Generator',name:'Water Level',desc:'Check coolant sight glass',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Low',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'gen_oil',sec:'Emergency Generator',name:'Oil Level',desc:'Check dipstick',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Low',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'gen_hrs',sec:'Emergency Generator',name:'Hours',desc:'Cumulative engine hours',type:'numeric',unit:'hrs',cumulative:true,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'gen_crank',sec:'Emergency Generator',name:'Crankcase Heater',desc:'Read thermometer on crankcase',type:'numeric',unit:'°F',cumulative:false,opts:[],warnLo:'120',warnHi:'150',alertLo:'100',alertHi:'170',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'gen_fuel',sec:'Emergency Generator',name:'Day Tank Fuel Level',desc:'Read sight glass on day tank',type:'status',unit:'',cumulative:false,opts:[{label:'7/8',style:'ok'},{label:'3/4',style:'ok'},{label:'1/2',style:'warn'},{label:'1/4',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'ch_hrs',sec:'Chiller',name:'Chiller Hours',desc:'Cumulative run hours',type:'numeric',unit:'hrs',cumulative:true,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'ch_starts',sec:'Chiller',name:'Chiller Starts',desc:'Cumulative starts',type:'numeric',unit:'',cumulative:true,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'ch_oil',sec:'Chiller',name:'Chiller Oil Temp',desc:'Read oil temp on chiller display',type:'numeric',unit:'°F',cumulative:false,opts:[],warnLo:'120',warnHi:'145',alertLo:'110',alertHi:'160',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'ch_cond',sec:'Chiller',name:'Chiller Cond. #',desc:'Read condenser number on chiller display',type:'numeric',unit:'',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'ch_hal',sec:'Chiller',name:'Halogen Monitor 1-4',desc:'Check all 4 halogen detector indicators',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Off',style:''},{label:'Alarm',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'elev_dn',sec:'Elevator Mach Room',name:'Down Elevators',desc:'Check elevator status board',type:'status',unit:'',cumulative:false,opts:[{label:'None',style:'ok'},{label:'#1',style:'warn'},{label:'#2',style:'warn'},{label:'#3',style:'warn'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'elev_sup',sec:'Elevator Mach Room',name:'PAC 1-2 Supply Temp',desc:'Read supply air thermometer on PAC unit',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'High',style:'warn'},{label:'Fault',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'elev_ret',sec:'Elevator Mach Room',name:'PAC 1-2 Return Temp',desc:'Read return air thermometer on PAC unit',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'High',style:'warn'},{label:'Fault',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+    {id:'elev_pump',sec:'Elevator Mach Room',name:'Elev Cond. Pump #20-25',desc:'Read pressure gauge on condenser pump',type:'numeric',unit:'PSI',cumulative:false,opts:[],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
+  ]}]};
+}
+
+checkAdminSession();
+</script>
+</body>
+</html>
