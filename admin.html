@@ -29,14 +29,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .topbar .sub{font-size:12px;opacity:.8;margin-top:2px}
 .topbar-right{display:flex;align-items:center;gap:12px}
 .save-all{background:#fff;color:var(--acc);border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer}
-.import-btn{background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer}
-#import-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center}
-#import-overlay.open{display:flex}
-#import-box{background:var(--surf);border-radius:12px;padding:24px;width:90%;max-width:480px;display:flex;flex-direction:column;gap:14px}
-#import-box h3{margin:0;font-size:16px}
-#import-box p{margin:0;font-size:13px;opacity:.7}
-#import-json{width:100%;height:120px;border-radius:8px;border:1px solid var(--bdr);background:var(--surf2);color:var(--txt);padding:10px;font-size:12px;font-family:monospace;resize:vertical;box-sizing:border-box}
-.import-actions{display:flex;gap:10px;justify-content:flex-end}
 .logout-admin{background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer}
 .container{max-width:1100px;margin:0 auto;padding:28px 20px;display:flex;flex-direction:column;gap:20px}
 .panel{background:var(--surf);border-radius:var(--r);border:1px solid var(--bdr);overflow:hidden}
@@ -84,6 +76,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .log-item.drag-over{border-color:var(--acc);box-shadow:0 0 0 2px rgba(37,99,235,.2)}
 .drag-handle{color:var(--txt2);font-size:16px;cursor:grab;padding:0 4px;flex-shrink:0;user-select:none}
 .drag-handle:active{cursor:grabbing}
+/* Prevent drag-and-drop conflict with text inputs */
+.log-item input, .log-item textarea, .log-item select,
+.section-block input, .section-block textarea, .section-block select {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
 .sec-hdr{padding:11px 14px;background:var(--surf2);display:flex;align-items:center;gap:8px;user-select:none}
 .sec-hdr .sec-name{font-size:13px;font-weight:700;flex:1;cursor:pointer}
 .sec-hdr .sec-count{font-size:10px;color:var(--txt2);background:var(--bdr);padding:2px 7px;border-radius:20px}
@@ -177,21 +175,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="topbar-right">
       <button class="logout-admin" onclick="doAdminLogout()">Sign Out</button>
-      <button class="import-btn" onclick="openImport()">Import Config</button>
       <button class="save-all" onclick="saveAll()">Save & Publish</button>
-    </div>
-  </div>
-
-  <!-- Import Config Overlay -->
-  <div id="import-overlay">
-    <div id="import-box">
-      <h3>Import Configuration</h3>
-      <p>Paste your config JSON below (copy it from another device's browser console using: <code>copy(localStorage.getItem('lc_admin_config'))</code>)</p>
-      <textarea id="import-json" placeholder="Paste JSON here..."></textarea>
-      <div class="import-actions">
-        <button class="logout-admin" onclick="closeImport()">Cancel</button>
-        <button class="save-all" onclick="doImport()">Import & Apply</button>
-      </div>
     </div>
   </div>
   <div class="container">
@@ -297,12 +281,22 @@ function doAdminSetPw(){
   saveUsers(users);localStorage.removeItem('lc_admin_pending');localStorage.setItem('lc_admin_session',username);enterAdmin(user);
 }
 function doAdminLogout(){localStorage.removeItem('lc_admin_session');showScreen('s-login');}
-function enterAdmin(user){
+async function enterAdmin(user){
   showScreen('s-main');
   const cfg=getConfig();
-  document.getElementById('admin-building-sub').textContent=cfg.building||'Admin Panel';
-  document.getElementById('cfg-building').value=cfg.building||'';
-  document.getElementById('cfg-webhook').value=cfg.webhook||'';
+  // Try to fetch latest config from webhook
+  const webhookUrl=cfg.webhookUrl||cfg.webhook||localStorage.getItem('lc_sheet_url')||'';
+  if(webhookUrl){
+    try{
+      const res=await fetch(webhookUrl+'?action=getConfig',{cache:'no-store'});
+      const data=await res.json();
+      if(data.ok&&data.config){saveConfig(data.config);config=data.config;}
+    }catch(e){/* offline — use local cache */}
+  }
+  config=getConfig();
+  document.getElementById('admin-building-sub').textContent=config.building||'Admin Panel';
+  document.getElementById('cfg-building').value=config.building||'';
+  document.getElementById('cfg-webhook').value=config.webhookUrl||config.webhook||webhookUrl||'';
   renderEmailTags();renderUsers();renderTemplates();
 }
 
@@ -398,9 +392,24 @@ function initSectionDrag(el,tmplId,secName){
   });
 }
 
+function duplicateLog(tmplId,logId){
+  config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);if(!tmpl)return;
+  const log=(tmpl.logs||[]).find(l=>l.id===logId);if(!log)return;
+  const copy=JSON.parse(JSON.stringify(log));
+  copy.id='log_'+Date.now();copy.name=log.name+' (copy)';
+  const idx=tmpl.logs.findIndex(l=>l.id===logId);
+  tmpl.logs.splice(idx+1,0,copy);
+  saveConfig(config);
+  const secId='sec_'+tmplId+'_'+btoa(log.sec).replace(/=/g,'');
+  renderLogs(tmplId,log.sec,secId);
+  showToast('"'+log.name+'" duplicated');
+}
+
 function initLogDrag(el,tmplId,logId,secName){
   el.setAttribute('draggable','true');
   el.addEventListener('dragstart',e=>{
+    // Don't drag if user is interacting with a text field
+    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT'){e.preventDefault();return;}
     dragState={type:'log',tmplId,logId,secName,el};
     el.classList.add('dragging');
     e.dataTransfer.effectAllowed='move';
@@ -564,6 +573,7 @@ function renderLogs(tmplId,secName,secId){
         ${typeBadge}${condBadge}${condDesc}
         <span class="log-item-meta">${log.unit||''}</span>
         <div class="item-controls">
+          <button class="btn btn-secondary btn-sm" onclick="duplicateLog('${tmplId}','${log.id}')">Duplicate</button>
           <button class="btn btn-danger btn-sm" onclick="deleteLog('${tmplId}','${log.id}')">Delete</button>
         </div>
       </div>
@@ -665,34 +675,41 @@ function deleteLog(tmplId,logId){
   const secId='sec_'+tmplId+'_'+btoa(secName).replace(/=/g,'');renderLogs(tmplId,secName,secId);
 }
 
-// IMPORT CONFIG
-function openImport(){document.getElementById('import-overlay').classList.add('open');document.getElementById('import-json').value='';}
-function closeImport(){document.getElementById('import-overlay').classList.remove('open');}
-function doImport(){
-  const raw=document.getElementById('import-json').value.trim();
-  if(!raw){showToast('Nothing to import');return;}
-  try{
-    const parsed=JSON.parse(raw);
-    localStorage.setItem('lc_admin_config',JSON.stringify(parsed));
-    config=parsed;
-    closeImport();
-    showToast('✓ Config imported successfully');
-    renderTemplates();renderUsers();
-  }catch(e){showToast('Invalid JSON — check your paste');}
-}
-
 // SAVE ALL
-function saveAll(){
-  config=getConfig();config.building=document.getElementById('cfg-building').value;config.webhook=document.getElementById('cfg-webhook').value;
-  saveConfig(config);localStorage.setItem('lc_sheet_url',config.webhook);localStorage.setItem('lc_alert_emails',JSON.stringify(config.alertEmails||[]));
+async function saveAll(){
+  config=getConfig();
+  config.building=document.getElementById('cfg-building').value;
+  config.webhookUrl=document.getElementById('cfg-webhook').value;
+  config.webhook=config.webhookUrl; // keep legacy key too
+  saveConfig(config);
+  localStorage.setItem('lc_sheet_url',config.webhookUrl);
+  localStorage.setItem('lc_alert_emails',JSON.stringify(config.alertEmails||[]));
   localStorage.setItem('lc_eng',JSON.stringify(getUsers().map(u=>u.username)));
   document.getElementById('admin-building-sub').textContent=config.building||'Admin Panel';
-  showToast('✓ Saved and published to mobile app');renderTemplates();renderUsers();
+
+  // Push config to Google Sheet so mobile app picks it up on next open
+  if(config.webhookUrl){
+    try{
+      showToast('Publishing...');
+      const res=await fetch(config.webhookUrl,{
+        method:'POST',
+        body:JSON.stringify({action:'saveConfig',config})
+      });
+      const result=await res.json();
+      if(result.ok)showToast('✓ Saved & published to all devices');
+      else showToast('⚠️ Saved locally — Sheet sync failed');
+    }catch(e){
+      showToast('⚠️ Saved locally — check webhook URL');
+    }
+  }else{
+    showToast('✓ Saved — add a webhook URL to sync to devices');
+  }
+  renderTemplates();renderUsers();
 }
 
 // DEFAULT CONFIG
 function getDefaultConfig(){
-  return{building:'343 Sansome St.',webhook:'',alertEmails:['smorris@metroservices.com'],templates:[{id:'tmpl_daily',name:'Daily Rounds',description:'Standard daily building rounds',sheetTab:'Daily Rounds',active:true,logs:[
+  return{building:'',webhook:'',webhookUrl:'',alertEmails:['smorris@metroservices.com'],templates:[{id:'tmpl_daily',name:'Daily Rounds',description:'Standard daily building rounds',sheetTab:'Daily Rounds',active:true,logs:[
     {id:'fcr_alarms',sec:'Fire Control Room',name:'Alarms',desc:'Check panel for any active alarms',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Active',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
     {id:'fcr_troubles',sec:'Fire Control Room',name:'Troubles',desc:'Check panel for trouble conditions',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Active',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
     {id:'fcr_supervisory',sec:'Fire Control Room',name:'Supervisory',desc:'Check supervisory conditions',type:'status',unit:'',cumulative:false,opts:[{label:'OK',style:'ok'},{label:'Active',style:'alarm'}],warnLo:'',warnHi:'',alertLo:'',alertHi:'',condEnabled:false,condTrigger:'',condValue:''},
