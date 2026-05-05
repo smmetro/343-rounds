@@ -296,57 +296,83 @@ async function enterAdmin(user){
 }
 
 // USERS
-function renderUsers(){
-  const users=getUsers();const cfg=getConfig();const templates=cfg.templates||[];
+// USER MANAGEMENT — Supabase backed
+async function renderUsers(){
+  const{data:users}=await db.from('users').select('*');
+  const cfg=getConfig();const templates=cfg.templates||[];
   const tbody=document.getElementById('user-tbody');tbody.innerHTML='';
-  users.forEach(u=>{
+  (users||[]).forEach(u=>{
     const tr=document.createElement('tr');
-    const status=u.forceReset?'<span class="user-status status-reset">Reset Required</span>':'<span class="user-status status-active">Active</span>';
-    const role=u.isAdmin?'<span class="user-status status-admin">Admin</span>':'Engineer';
+    const status=u.force_reset?'<span class="user-status status-reset">Reset Required</span>':'<span class="user-status status-active">Active</span>';
+    const role=u.is_admin?'<span class="user-status status-admin">Admin</span>':'Engineer';
+    const assigned=u.assigned_rounds;
     let assignedDisplay='';
-    if(u.assignedRounds==='all'){assignedDisplay='<span style="color:var(--ok);font-size:12px;font-weight:600">All Rounds</span>';}
-    else{const assigned=u.assignedRounds||[];assignedDisplay=templates.map(t=>`<button class="round-assign-btn ${assigned.includes(t.id)?'assigned':''}" onclick="toggleRoundAssign('${u.username}','${t.id}')">${t.name}</button>`).join('');}
+    if(assigned==='all'){assignedDisplay='<span style="color:var(--ok);font-size:12px;font-weight:600">All Rounds</span>';}
+    else{const arr=assigned||[];assignedDisplay=templates.map(t=>`<button class="round-assign-btn ${arr.includes(t.id)?'assigned':''}" onclick="toggleRoundAssign('${u.username}','${t.id}')">${t.name}</button>`).join('');}
     tr.innerHTML=`<td><strong>${u.username}</strong></td><td style="font-size:12px;color:var(--txt2)">${u.email||'—'}</td><td>${role}</td><td>${status}</td>
-      <td><div class="round-assign">${assignedDisplay}<button class="round-assign-btn" style="border-style:dashed" onclick="toggleAllRounds('${u.username}')">${u.assignedRounds==='all'?'Restrict Access':'Grant All'}</button></div></td>
+      <td><div class="round-assign">${assignedDisplay}<button class="round-assign-btn" style="border-style:dashed" onclick="toggleAllRounds('${u.username}','${assigned==='all'}')">${assigned==='all'?'Restrict Access':'Grant All'}</button></div></td>
       <td><div style="display:flex;gap:5px;flex-wrap:wrap">
-        ${!u.isAdmin?`<button class="btn btn-secondary btn-sm" onclick="makeAdmin('${u.username}')">Make Admin</button>`:`<button class="btn btn-secondary btn-sm" onclick="removeAdmin('${u.username}')">Remove Admin</button>`}
+        ${!u.is_admin?`<button class="btn btn-secondary btn-sm" onclick="makeAdmin('${u.username}')">Make Admin</button>`:`<button class="btn btn-secondary btn-sm" onclick="removeAdmin('${u.username}')">Remove Admin</button>`}
         <button class="btn btn-warn btn-sm" onclick="forceReset('${u.username}')">Force Reset</button>
         <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.username}')">Delete</button>
       </div></td>`;
     tbody.appendChild(tr);
   });
 }
+
 function toggleAddUser(){document.getElementById('add-user-form').classList.toggle('open');}
-function addUser(){
+
+async function addUser(){
   const username=document.getElementById('new-username').value.trim();
   const email=document.getElementById('new-email').value.trim();
   const isAdmin=document.getElementById('new-role').value==='admin';
   if(!username){showToast('Username is required');return;}
-  const users=getUsers();
-  if(users.find(u=>u.username===username)){showToast('Username already exists');return;}
-  users.push({username,email,pwHash:null,forceReset:false,isAdmin,assignedRounds:'all'});
-  saveUsers(users);document.getElementById('new-username').value='';document.getElementById('new-email').value='';
-  document.getElementById('add-user-form').classList.remove('open');renderUsers();showToast('User "'+username+'" created');
+  const{error}=await db.from('users').insert({username,email,is_admin:isAdmin,assigned_rounds:'all',force_reset:true});
+  if(error){showToast('Error: '+error.message);return;}
+  document.getElementById('new-username').value='';document.getElementById('new-email').value='';
+  document.getElementById('add-user-form').classList.remove('open');
+  renderUsers();showToast('User "'+username+'" created — they will set their password on first login');
 }
-function forceReset(username){
+
+async function forceReset(username){
   if(!confirm('Force password reset for "'+username+'"?'))return;
-  const users=getUsers();const user=users.find(u=>u.username===username);
-  if(user){user.forceReset=true;user.pwHash=null;}saveUsers(users);renderUsers();showToast('Password reset forced');
+  await db.from('users').update({force_reset:true,pw_hash:null}).eq('username',username);
+  renderUsers();showToast('Password reset forced');
 }
-function makeAdmin(username){const users=getUsers();const user=users.find(u=>u.username===username);if(user)user.isAdmin=true;saveUsers(users);renderUsers();showToast(username+' is now an admin');}
-function removeAdmin(username){
-  const users=getUsers();if(users.filter(u=>u.isAdmin).length<=1){showToast('Cannot remove the last admin');return;}
-  const user=users.find(u=>u.username===username);if(user)user.isAdmin=false;saveUsers(users);renderUsers();showToast(username+' is now a standard engineer');
+
+async function makeAdmin(username){
+  await db.from('users').update({is_admin:true}).eq('username',username);
+  renderUsers();showToast(username+' is now an admin');
 }
-function deleteUser(username){if(!confirm('Delete user "'+username+'"?'))return;saveUsers(getUsers().filter(u=>u.username!==username));renderUsers();showToast('User deleted');}
-function toggleRoundAssign(username,templateId){
-  const users=getUsers();const user=users.find(u=>u.username===username);if(!user)return;
-  if(user.assignedRounds==='all')user.assignedRounds=[];
-  const idx=user.assignedRounds.indexOf(templateId);
-  if(idx===-1)user.assignedRounds.push(templateId);else user.assignedRounds.splice(idx,1);
-  saveUsers(users);renderUsers();
+
+async function removeAdmin(username){
+  const{data}=await db.from('users').select('*').eq('is_admin',true);
+  if((data||[]).length<=1){showToast('Cannot remove the last admin');return;}
+  await db.from('users').update({is_admin:false}).eq('username',username);
+  renderUsers();showToast(username+' is now a standard engineer');
 }
-function toggleAllRounds(username){const users=getUsers();const user=users.find(u=>u.username===username);if(!user)return;user.assignedRounds=user.assignedRounds==='all'?[]:'all';saveUsers(users);renderUsers();}
+
+async function deleteUser(username){
+  if(!confirm('Delete user "'+username+'"?'))return;
+  await db.from('users').delete().eq('username',username);
+  renderUsers();showToast('User deleted');
+}
+
+async function toggleRoundAssign(username,templateId){
+  const{data}=await db.from('users').select('assigned_rounds').eq('username',username).single();
+  let assigned=data.assigned_rounds;
+  if(assigned==='all')assigned=[];
+  const idx=assigned.indexOf(templateId);
+  if(idx===-1)assigned.push(templateId);else assigned.splice(idx,1);
+  await db.from('users').update({assigned_rounds:assigned}).eq('username',username);
+  renderUsers();
+}
+
+async function toggleAllRounds(username,isCurrentlyAll){
+  const newVal=isCurrentlyAll==='true'?[]:'all';
+  await db.from('users').update({assigned_rounds:newVal}).eq('username',username);
+  renderUsers();
+}
 
 // EMAIL TAGS
 let config=getConfig();
@@ -476,18 +502,23 @@ function editTemplateInfo(tmplId){
   const name=prompt('Round template name:',tmpl.name);if(name===null)return;
   const desc=prompt('Description:',tmpl.description||'');
   const tab=prompt('Google Sheet tab name:',tmpl.sheetTab||tmpl.name);
-  tmpl.name=name.trim()||tmpl.name;tmpl.description=desc||'';tmpl.sheetTab=tab||tmpl.name;
+  const emoji=prompt('Icon emoji (e.g. 🏢 ⚡ 💧 🌡️ 🔧 ⚙️ 📊 🔥):',tmpl.icon||'🏢');
+  tmpl.name=name.trim()||tmpl.name;tmpl.description=desc||'';tmpl.sheetTab=tab||tmpl.name;tmpl.icon=emoji||tmpl.icon||'🏢';
   saveConfig(config);renderTemplates();
 }
+
 function deleteTemplate(tmplId){
   config=getConfig();const tmpl=config.templates.find(t=>t.id===tmplId);
   if(!confirm('Delete template "'+tmpl.name+'"?'))return;
   config.templates=config.templates.filter(t=>t.id!==tmplId);saveConfig(config);renderTemplates();
 }
+
 function addTemplate(){
   const name=prompt('New round template name:');if(!name||!name.trim())return;
-  const desc=prompt('Description:','');const tab=prompt('Google Sheet tab name:',name.trim());
-  config=getConfig();config.templates.push({id:'tmpl_'+Date.now(),name:name.trim(),description:desc||'',sheetTab:tab||name.trim(),active:true,logs:[]});
+  const desc=prompt('Description:','');
+  const tab=prompt('Google Sheet tab name:',name.trim());
+  const emoji=prompt('Icon emoji (e.g. 🏢 ⚡ 💧 🌡️ 🔧 ⚙️ 📊 🔥):','🏢');
+  config=getConfig();config.templates.push({id:'tmpl_'+Date.now(),name:name.trim(),description:desc||'',sheetTab:tab||name.trim(),icon:emoji||'🏢',active:true,logs:[]});
   saveConfig(config);renderTemplates();renderUsers();showToast('Template "'+name.trim()+'" created');
 }
 

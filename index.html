@@ -60,7 +60,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .prog-bar{flex:1;height:4px;background:var(--bdr);border-radius:2px;overflow:hidden}
 .prog-fill{height:100%;background:var(--acc);border-radius:2px;transition:width .3s}
 .prog-txt{font-size:11px;color:var(--txt2);white-space:nowrap}
-.badge{display:inline-block;background:var(--surf2);color:var(--acc);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.4px}
+.badge{display:block;background:var(--surf2);color:var(--acc);font-size:13px;font-weight:800;padding:8px 14px;border-radius:10px;text-transform:uppercase;letter-spacing:1px;margin-top:4px;border:1px solid var(--bdr)}
 .log-nav-inline{display:flex;gap:10px;align-items:center}
 .log-content{flex:1;padding:10px 14px;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .log-card{background:var(--surf);border-radius:var(--r);padding:14px;border:1px solid var(--bdr);flex:1;display:flex;flex-direction:column;gap:10px}
@@ -219,8 +219,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 function hashPw(pw){let h=0;for(let i=0;i<pw.length;i++){h=((h<<5)-h)+pw.charCodeAt(i);h|=0;}return h.toString(36);}
-function getUsers(){return JSON.parse(localStorage.getItem('lc_users')||'[]');}
-function saveUsers(u){localStorage.setItem('lc_users',JSON.stringify(u));}
+let USERS_CACHE = null;
+
+async function getUsers(){
+  if(USERS_CACHE)return USERS_CACHE;
+  try{
+    const{data,error}=await db.from('users').select('*');
+    if(!error&&data&&data.length){
+      USERS_CACHE=data.map(u=>({username:u.username,email:u.email,pwHash:u.pw_hash,isAdmin:u.is_admin,assignedRounds:u.assigned_rounds,forceReset:u.force_reset}));
+      localStorage.setItem('lc_users',JSON.stringify(USERS_CACHE));
+      return USERS_CACHE;
+    }
+  }catch(e){}
+  const cached=localStorage.getItem('lc_users');
+  if(cached)USERS_CACHE=JSON.parse(cached);
+  else USERS_CACHE=[{username:'Scott',email:'smorris@metroservices.com',pwHash:null,isAdmin:true,assignedRounds:'all',forceReset:false}];
+  return USERS_CACHE;
+}
+
+async function saveUserPassword(username,pwHash){
+  try{
+    await db.from('users').update({pw_hash:pwHash,force_reset:false}).eq('username',username);
+  }catch(e){}
+  // Also update local cache
+  if(USERS_CACHE){const u=USERS_CACHE.find(u=>u.username===username);if(u){u.pwHash=pwHash;u.forceReset=false;}}
+  localStorage.setItem('lc_users',JSON.stringify(USERS_CACHE));
+}
 function goTo(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById('s-'+id).classList.add('active');window.scrollTo(0,0);}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
 function fmtTime(iso){if(!iso)return'';const d=new Date(iso);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});}
@@ -247,23 +271,23 @@ async function loadConfig(){
 function getConfig(){return APP_CONFIG||getDefaultConfig();}
 
 async function init(){
-  await loadConfig();
+  await Promise.all([loadConfig(),getUsers()]);
   document.getElementById('loading-overlay').classList.add('gone');
   checkSession();
 }
 
-function checkSession(){
-  const users=getUsers();
-  if(!users.length){users.push({username:'Scott',email:'smorris@metroservices.com',pwHash:null,forceReset:false,isAdmin:true,assignedRounds:'all'});saveUsers(users);}
+async function checkSession(){
+  const users=await getUsers();
   const token=localStorage.getItem('lc_session');
   if(token){const user=users.find(u=>u.username===token);if(user){enterApp(user);return;}}
   goTo('login');
 }
 
-function doLogin(){
+async function doLogin(){
   const username=document.getElementById('login-user').value.trim();
   const password=document.getElementById('login-pass').value;
-  const users=getUsers();const user=users.find(u=>u.username===username);
+  const users=await getUsers();
+  const user=users.find(u=>u.username===username);
   const errEl=document.getElementById('login-err');
   if(!user){errEl.classList.add('show');return;}
   if(!user.pwHash||user.forceReset){localStorage.setItem('lc_pending_reset',username);goTo('setpw');return;}
@@ -271,17 +295,20 @@ function doLogin(){
   errEl.classList.remove('show');localStorage.setItem('lc_session',username);enterApp(user);
 }
 
-function doSetPw(){
+async function doSetPw(){
   const pw1=document.getElementById('pw1').value,pw2=document.getElementById('pw2').value;
   const errEl=document.getElementById('pw-err');
   if(pw1.length<6){errEl.textContent='Password must be at least 6 characters';errEl.classList.add('show');return;}
   if(pw1!==pw2){errEl.textContent="Passwords don't match";errEl.classList.add('show');return;}
   errEl.classList.remove('show');
   const username=localStorage.getItem('lc_pending_reset');
-  const users=getUsers();const user=users.find(u=>u.username===username);
-  if(user){user.pwHash=hashPw(pw1);user.forceReset=false;}
-  saveUsers(users);localStorage.removeItem('lc_pending_reset');
-  localStorage.setItem('lc_session',username);enterApp(user);
+  await saveUserPassword(username,hashPw(pw1));
+  USERS_CACHE=null;
+  localStorage.removeItem('lc_pending_reset');
+  localStorage.setItem('lc_session',username);
+  const users=await getUsers();
+  const user=users.find(u=>u.username===username);
+  if(user)enterApp(user);
 }
 
 function doLogout(){localStorage.removeItem('lc_session');ST.currentUser=null;goTo('login');}
@@ -307,8 +334,9 @@ function renderRoundCards(user){
   const container=document.getElementById('round-cards');container.innerHTML='';
   if(!templates.length){container.innerHTML='<div class="no-rounds">No rounds assigned.<br>Contact your administrator.</div>';return;}
   templates.forEach((tmpl,i)=>{
+    const icon=tmpl.icon||ICONS[i%ICONS.length];
     const card=document.createElement('div');card.className='round-card';
-    card.innerHTML=`<div class="round-icon">${ICONS[i%ICONS.length]}</div><div class="round-info"><div class="round-name">${tmpl.name}</div><div class="round-desc">${tmpl.description||((tmpl.logs||[]).length+' log points')}</div></div><div class="round-arrow">→</div>`;
+    card.innerHTML=`<div class="round-icon">${icon}</div><div class="round-info"><div class="round-name">${tmpl.name}</div><div class="round-desc">${tmpl.description||((tmpl.logs||[]).length+' log points')}</div></div><div class="round-arrow">→</div>`;
     card.onclick=()=>selectTemplate(tmpl);container.appendChild(card);
   });
 }
