@@ -518,6 +518,7 @@ async function syncRound(data,el){
   try{
     const entries=(ST.selectedTemplate.logs||[]).map(lp=>({
       name:lp.name,
+      sec:lp.sec||'General',
       value:data.vals[lp.id]!==undefined?data.vals[lp.id]:'',
       unit:lp.unit||'',
       notes:data.notes[lp.id]||'',
