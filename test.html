@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Rounds Connection Test</title>
+<meta name="theme-color" content="#0f1117">
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0f1117;--surf:#1c1f2e;--surf2:#252840;--acc:#4f8ef7;--ok:#2ecc71;--warn:#f39c12;--danger:#e74c3c;--txt:#f0f2ff;--txt2:#9ba3c7;--bdr:#2e3250;--r:14px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--txt);max-width:480px;margin:0 auto;padding:20px 16px calc(28px + env(safe-area-inset-bottom))}
+h1{font-size:20px;font-weight:800}
+.sub{font-size:12px;color:var(--txt2);margin-top:4px;line-height:1.5}
+.card{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);padding:14px;margin-top:14px}
+.step{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--bdr)}
+.step:last-child{border-bottom:none}
+.dot{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:var(--surf2);color:var(--txt2);margin-top:1px}
+.dot.run{background:var(--acc);color:#fff;animation:pulse 1s infinite}
+.dot.ok{background:var(--ok);color:#06210f}
+.dot.fail{background:var(--danger);color:#fff}
+@keyframes pulse{50%{opacity:.5}}
+.step-title{font-size:14px;font-weight:700}
+.step-detail{font-size:12px;color:var(--txt2);margin-top:3px;line-height:1.45;word-break:break-word}
+.step-detail a{color:var(--acc)}
+.fail-text{color:var(--danger)}
+#gbtn{margin-top:12px;min-height:44px}
+.btn{width:100%;padding:14px;border-radius:11px;border:none;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px}
+.btn-acc{background:var(--acc);color:#fff}
+.btn-sec{background:var(--surf2);color:var(--txt);border:1px solid var(--bdr)}
+.btn:disabled{opacity:.4}
+.who{font-size:13px;margin-top:10px;color:var(--txt2)}.who b{color:var(--txt)}
+.env{font-size:11px;color:var(--txt2);line-height:1.6}
+.summary{font-size:14px;font-weight:700;text-align:center;padding:4px 0}
+.summary.ok{color:var(--ok)}.summary.fail{color:var(--danger)}
+#photoInput{display:none}
+</style>
+</head>
+<body>
+<h1>Rounds Connection Test</h1>
+<div class="sub">Confirms the new Google setup works on this phone before the full app is built. Nothing here touches the live Rounds app.</div>
+
+<div class="card">
+  <div class="step"><div class="dot" id="d1">1</div><div><div class="step-title">Server reachable</div><div class="step-detail" id="t1">Waiting...</div></div></div>
+  <div class="step"><div class="dot" id="d2">2</div><div><div class="step-title">Google sign-in</div><div class="step-detail" id="t2">Tap the button below.</div></div></div>
+  <div class="step"><div class="dot" id="d3">3</div><div><div class="step-title">Account approved for Rounds</div><div class="step-detail" id="t3">After sign-in.</div></div></div>
+  <div class="step"><div class="dot" id="d4">4</div><div><div class="step-title">Write a row to the Sheet</div><div class="step-detail" id="t4">After sign-in.</div></div></div>
+  <div class="step"><div class="dot" id="d5">5</div><div><div class="step-title">Photo to Drive</div><div class="step-detail" id="t5">Tap Take Test Photo after sign-in.</div></div></div>
+  <div class="step"><div class="dot" id="d6">6</div><div><div class="step-title">Stays signed in</div><div class="step-detail" id="t6">Close this page fully, reopen it, and this should pass without signing in again.</div></div></div>
+</div>
+
+<div class="card" id="auth-card">
+  <div id="gbtn"></div>
+  <div class="who" id="who"></div>
+  <button class="btn btn-acc" id="photo-btn" onclick="document.getElementById('photoInput').click()" disabled>📷 Take Test Photo</button>
+  <button class="btn btn-sec" id="rerun-btn" onclick="runChecks()" disabled>Run Checks Again</button>
+  <button class="btn btn-sec" id="out-btn" onclick="signOut()" style="display:none">Sign Out</button>
+</div>
+
+<div class="card"><div class="summary" id="summary">Running...</div></div>
+
+<div class="card"><div class="env" id="env"></div></div>
+
+<input type="file" id="photoInput" accept="image/*" capture="environment" onchange="handlePhoto(event)">
+
+<script>
+const CLIENT_ID='1029316106419-u8cc3mq65a5fos9gp3074d0bbfkvsgsr.apps.googleusercontent.com';
+const SCRIPT_URL='https://script.google.com/macros/s/AKfycbz5JBeX5EPFHx4Q5Lpz40yGsy2g8fcQ7OxW1AXjR01gtkGDhYAbNQRDBXFThlHZzSuNqg/exec';
+const SESSION_KEY='rounds_session_v2';
+const PHOTO_KEY='rounds_test_photo_ok';
+
+const S={session:null,user:null,results:{}};
+const standalone=window.navigator.standalone===true||window.matchMedia('(display-mode: standalone)').matches;
+const modeLabel=standalone?'Home screen app':'Browser tab';
+
+function load(){try{const v=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');if(v&&v.session){S.session=v.session;S.user=v.user;}}catch(e){}}
+function save(){try{localStorage.setItem(SESSION_KEY,JSON.stringify({session:S.session,user:S.user}));}catch(e){}}
+function clear(){S.session=null;S.user=null;try{localStorage.removeItem(SESSION_KEY);}catch(e){}}
+
+function setStep(n,state,html){
+  const d=document.getElementById('d'+n),t=document.getElementById('t'+n);
+  d.className='dot'+(state?' '+state:'');d.textContent=state==='ok'?'✓':state==='fail'?'✕':n;
+  if(html!==undefined)t.innerHTML=html;
+  if(state==='ok'||state==='fail')S.results[n]=state;
+  updateSummary();
+}
+function updateSummary(){
+  const el=document.getElementById('summary');const r=S.results;
+  const fails=Object.values(r).filter(v=>v==='fail').length;
+  const oks=Object.values(r).filter(v=>v==='ok').length;
+  if(fails){el.className='summary fail';el.textContent=fails+' check'+(fails>1?'s':'')+' failed. Screenshot this page and send it to Claude.';}
+  else if(oks>=6){el.className='summary ok';el.textContent='All 6 checks passed ✓';}
+  else{el.className='summary';el.textContent=oks+' of 6 passed so far';}
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+// text/plain avoids the browser pre-check that blocked Apps Script calls in May
+async function api(action,data){
+  const t0=performance.now();
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({action,session:S.session},data||{}))});
+  const j=await res.json();j._ms=Math.round(performance.now()-t0);
+  if(!j.ok){const e=new Error(j.error||'Unknown error');e.code=j.code;throw e;}
+  return j;
+}
+
+async function stepPing(){
+  setStep(1,'run','Contacting server...');
+  if(SCRIPT_URL.indexOf('PASTE_')===0){setStep(1,'fail','<span class="fail-text">Server address not filled in yet.</span>');return false;}
+  try{const r=await api('ping');setStep(1,'ok','Connected in '+r._ms+' ms (server v'+esc(r.version)+')');return true;}
+  catch(e){setStep(1,'fail','<span class="fail-text">'+esc(e.message)+'</span>');return false;}
+}
+
+async function onGoogleCredential(resp){
+  setStep(2,'ok','Google confirmed your identity.');
+  setStep(3,'run','Checking the Users list...');
+  try{
+    const r=await api('signIn',{idToken:resp.credential});
+    S.session=r.session;S.user=r.user;save();
+    setStep(3,'ok','Approved as <b>'+esc(r.user.name)+'</b> ('+esc(r.user.role)+') in '+r._ms+' ms');
+    setStep(6,'','Now close this page fully, reopen it, and this should pass without signing in again.');
+    signedInUI();await stepWrite();
+  }catch(e){setStep(3,'fail','<span class="fail-text">'+esc(e.message)+'</span>');}
+}
+
+async function stepWrite(){
+  setStep(4,'run','Writing test row...');
+  try{const r=await api('testWrite',{device:navigator.userAgent,mode:modeLabel});
+    setStep(4,'ok','Row '+r.row+' written to the Connection Test tab in '+r._ms+' ms');}
+  catch(e){handleAuthFail(e);setStep(4,'fail','<span class="fail-text">'+esc(e.message)+'</span>');}
+}
+
+async function stepResume(){
+  setStep(6,'run','Found a saved session, checking it...');
+  try{const r=await api('whoami');S.user=r.user;save();
+    setStep(2,'ok','Not needed, saved session used.');
+    setStep(3,'ok','Approved as <b>'+esc(r.user.name)+'</b>');
+    setStep(6,'ok','Reopened and still signed in. No Google prompt needed.');
+    signedInUI();await stepWrite();}
+  catch(e){handleAuthFail(e);setStep(6,'fail','<span class="fail-text">'+esc(e.message)+'</span>');}
+}
+
+function handleAuthFail(e){if(e.code==='AUTH'){clear();signedOutUI();}}
+
+// Shrinks a camera photo to ~1600px JPEG before upload, same as the real app will
+function compressImage(file,maxDim,quality){
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file);const img=new Image();
+    img.onload=()=>{
+      const scale=Math.min(1,maxDim/Math.max(img.naturalWidth,img.naturalHeight));
+      const w=Math.round(img.naturalWidth*scale),h=Math.round(img.naturalHeight*scale);
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);URL.revokeObjectURL(url);
+      c.toBlob(b=>b?resolve(b):reject(new Error('Could not compress photo')),'image/jpeg',quality);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Could not read photo'));};
+    img.src=url;
+  });
+}
+function blobToBase64(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(blob);});}
+
+async function handlePhoto(ev){
+  const file=ev.target.files&&ev.target.files[0];ev.target.value='';if(!file)return;
+  setStep(5,'run','Compressing...');
+  try{
+    const small=await compressImage(file,1600,0.8);
+    const kbIn=Math.round(file.size/1024),kbOut=Math.round(small.size/1024);
+    setStep(5,'run','Uploading '+kbOut+' KB (was '+kbIn+' KB)...');
+    const r=await api('testPhoto',{photo:await blobToBase64(small),mime:'image/jpeg'});
+    const msg='Saved '+kbOut+' KB (was '+kbIn+' KB) in '+r._ms+' ms. <a href="'+esc(r.url)+'" target="_blank">Open photo</a> · <a href="'+esc(r.folderUrl)+'" target="_blank">Open folder</a>';
+    setStep(5,'ok',msg);try{localStorage.setItem(PHOTO_KEY,msg);}catch(e){}
+  }catch(e){handleAuthFail(e);setStep(5,'fail','<span class="fail-text">'+esc(e.message)+'</span>');}
+}
+
+function signedInUI(){
+  document.getElementById('gbtn').style.display='none';
+  document.getElementById('who').innerHTML='Signed in as <b>'+esc(S.user.name)+'</b> · '+esc(S.user.email);
+  ['photo-btn','rerun-btn'].forEach(id=>document.getElementById(id).disabled=false);
+  document.getElementById('out-btn').style.display='block';
+}
+function signedOutUI(){
+  document.getElementById('gbtn').style.display='block';document.getElementById('who').textContent='';
+  ['photo-btn','rerun-btn'].forEach(id=>document.getElementById(id).disabled=true);
+  document.getElementById('out-btn').style.display='none';
+}
+function signOut(){clear();try{localStorage.removeItem(PHOTO_KEY);}catch(e){}location.reload();}
+
+function initGoogle(){
+  if(!window.google||!google.accounts||!google.accounts.id){setTimeout(initGoogle,150);return;}
+  google.accounts.id.initialize({client_id:CLIENT_ID,callback:onGoogleCredential,ux_mode:'popup',itp_support:true});
+  google.accounts.id.renderButton(document.getElementById('gbtn'),{theme:'filled_black',size:'large',shape:'pill',text:'signin_with',width:280});
+}
+
+async function runChecks(){
+  S.results={};
+  const up=await stepPing();if(!up)return;
+  if(S.session){
+    await stepResume();
+    let prev=null;try{prev=localStorage.getItem(PHOTO_KEY);}catch(e){}
+    if(prev&&S.session)setStep(5,'ok','Passed earlier. '+prev);
+  }
+}
+
+document.getElementById('env').innerHTML='<b>This device</b><br>Mode: '+modeLabel+'<br>'+esc(navigator.userAgent);
+load();
+if(S.session)signedInUI();else signedOutUI();
+initGoogle();
+runChecks();
+</script>
+</body>
+</html>
