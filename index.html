@@ -187,6 +187,9 @@ textarea:focus{border-color:var(--acc)}
     <div id="resume"></div>
     <div class="lbl">Start a round</div>
     <div id="round-cards"></div>
+    <div id="test-resume"></div>
+    <div class="lbl" style="margin-top:14px">Tests</div>
+    <div id="test-cards"></div>
   </div>
 </div>
 
@@ -230,7 +233,7 @@ textarea:focus{border-color:var(--acc)}
 
 <div id="s-done" class="screen">
   <div class="done-icon">✓</div>
-  <div><h2>Round saved</h2><p id="done-sum"></p></div>
+  <div><h2 id="done-title">Round saved</h2><p id="done-sum"></p></div>
   <div class="done-status" id="done-status"></div>
   <button class="btn btn-sec" onclick="goRounds()">Back to Rounds</button>
 </div>
@@ -256,7 +259,7 @@ textarea:focus{border-color:var(--acc)}
 // ============================================================
 // CONFIG
 // ============================================================
-const APP_VERSION='2.0.0';
+const APP_VERSION='2.1.0';
 const CLIENT_ID='1029316106419-u8cc3mq65a5fos9gp3074d0bbfkvsgsr.apps.googleusercontent.com';
 const API_URL='https://script.google.com/macros/s/AKfycbz5JBeX5EPFHx4Q5Lpz40yGsy2g8fcQ7OxW1AXjR01gtkGDhYAbNQRDBXFThlHZzSuNqg/exec';
 const MAX_PHOTOS=5;
@@ -296,8 +299,11 @@ let syncing=false,needsSignIn=false;
 let DB=null;
 function idb(){
   if(DB)return Promise.resolve(DB);
-  return new Promise((res,rej)=>{const q=indexedDB.open('rounds2',1);
-    q.onupgradeneeded=()=>{const d=q.result;d.createObjectStore('outbox',{keyPath:'id'});d.createObjectStore('photos',{keyPath:'pid'});};
+  return new Promise((res,rej)=>{const q=indexedDB.open('rounds2',2);
+    q.onupgradeneeded=()=>{const d=q.result;
+      if(!d.objectStoreNames.contains('outbox'))d.createObjectStore('outbox',{keyPath:'id'});
+      if(!d.objectStoreNames.contains('photos'))d.createObjectStore('photos',{keyPath:'pid'});
+      if(!d.objectStoreNames.contains('assets'))d.createObjectStore('assets',{keyPath:'k'});};
     q.onsuccess=()=>{DB=q.result;res(DB);};q.onerror=()=>rej(q.error);});
 }
 async function store(name,mode){const d=await idb();return d.transaction(name,mode).objectStore(name);}
@@ -358,8 +364,9 @@ async function onGoogle(resp){
 }
 async function signOut(){
   const pending=(await dbAll('outbox')).length;
-  if(pending){toast('Wait until waiting rounds are sent');return;}
+  if(pending){toast('Wait until waiting rounds and tests are sent');return;}
   if(R&&!confirm('Sign out and discard the round in progress?'))return;
+  if(T){toast('Finish or cancel the test in progress first');return;}
   lsDel(K.session);lsDel(K.boot);lsDel(K.active);lsDel(K.recent);SESSION=null;BOOT=null;R=null;
   try{google.accounts.id.disableAutoSelect();}catch(e){}
   showSignIn();
@@ -374,6 +381,7 @@ async function refreshBoot(waitForIt){
     needsSignIn=false;
     if(b.version&&!lsGet('r2_srv',null))lsSet('r2_srv',b.version);
     if($('s-rounds').classList.contains('active')||$('s-loading').classList.contains('active')){renderRounds();show('rounds');}
+    syncTests();
   }catch(e){
     if(e.code==='AUTH'){needsSignIn=true;if(!BOOT){lsDel(K.session);SESSION=null;showSignIn(e.message);return;}}
     if(!BOOT){show('signin');$('signin-err').textContent='No connection. Rounds needs signal the first time it opens.';}
@@ -399,7 +407,7 @@ function renderRounds(){
       (last?'<div class="round-last">Last: '+esc(fmtWhen(last.t))+' · '+esc(last.engineer)+'</div>':'')+'</div><div style="color:var(--txt2);font-size:20px">›</div>';
     b.onclick=()=>startRound(t.id);cards.appendChild(b);
   });
-  renderResume();updateSyncBar();
+  renderResume();renderTestCards();updateSyncBar();
 }
 function lastRoundFor(tid){
   let best=BOOT&&BOOT.lastRound?BOOT.lastRound[tid]:null;
@@ -732,16 +740,18 @@ async function submitRound(){
   const flagged=R.active.filter(l=>levelFor(l,vals[l.id])==='alert').length;
   $('done-sum').textContent=Object.keys(vals).length+' readings'+(flagged?' · '+flagged+' alert'+(flagged>1?'s':''):'')+' · '+R.tmpl.name;
   R=null;lsDel(K.active);btn.disabled=false;
+  $('done-title').textContent='Round saved';
   show('done');updateDoneStatus();processOutbox();
 }
 async function updateDoneStatus(){
   const el=$('done-status');if(!el)return;
   const ob=await dbAll('outbox'),ph=(await dbAll('photos')).filter(p=>p.queued);
-  if(!ob.length&&!ph.length){el.className='done-status ok';el.textContent='✓ Sent to the Sheet';return;}
+  if(!ob.length&&!ph.length){el.className='done-status ok';el.textContent=$('done-title').textContent==='Test saved'?'✓ Saved to Drive':'✓ Sent to the Sheet';return;}
   el.className='done-status wait';
   el.textContent=needsSignIn?'Sign in again to send it':(navigator.onLine===false?'No signal. It will send automatically when you have signal.':'Sending'+(ph.length?' ('+ph.length+' photo'+(ph.length>1?'s':'')+' left)':'')+'…');
 }
 function goRounds(){renderRounds();show('rounds');refreshBoot();}
+function testSavedScreen(){$('done-title').textContent='Test saved';}
 
 // ============================================================
 // OUTBOX: rounds then photos, retried until the server has them
@@ -751,7 +761,7 @@ async function processOutbox(){
   syncing=true;updateSyncBar();
   try{
     for(const item of (await dbAll('outbox')).sort((a,b)=>a.added-b.added)){
-      try{await api('submitRound',{round:item.payload},45000);await dbDel('outbox',item.id);}
+      try{if(item.type==='test')await sendTestItem(item);else await api('submitRound',{round:item.payload},45000);await dbDel('outbox',item.id);}
       catch(e){if(e.code==='AUTH'){needsSignIn=true;break;}item.tries++;item.err=e.message;await dbPut('outbox',item);if(e.code==='NET')break;}
     }
     if(!needsSignIn){
@@ -771,9 +781,10 @@ async function updateSyncBar(){
   const btn=$('sync-btn'),txt=$('sync-text');
   bar.className='sync-bar';btn.style.display='none';
   if(needsSignIn){bar.className='sync-bar auth';txt.textContent='Signed out. Sign in to keep sending rounds.';btn.textContent='Sign in';btn.style.display='';return;}
-  if(!ob.length&&!ph.length){txt.textContent='All rounds sent';return;}
+  if(!ob.length&&!ph.length){txt.textContent='All rounds and tests sent';return;}
   bar.className='sync-bar pending';
-  const parts=[];if(ob.length)parts.push(ob.length+' round'+(ob.length>1?'s':''));if(ph.length)parts.push(ph.length+' photo'+(ph.length>1?'s':''));
+  const nt=ob.filter(o=>o.type==='test').length,nr=ob.length-nt;
+  const parts=[];if(nr)parts.push(nr+' round'+(nr>1?'s':''));if(nt)parts.push(nt+' test'+(nt>1?'s':''));if(ph.length)parts.push(ph.length+' photo'+(ph.length>1?'s':''));
   txt.textContent=(syncing?'Sending ':'Waiting to send ')+parts.join(', ');
   if(!syncing){btn.textContent='Retry';btn.style.display='';}
 }
@@ -810,7 +821,10 @@ function makeIcon(){
     $('pwa-manifest').href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/manifest+json'}));}catch(e){}
 }
 
-init();
+document.addEventListener('DOMContentLoaded',init);
 </script>
+<script src="forms-layout.js"></script>
+<script src="forms-defs.js"></script>
+<script src="forms.js"></script>
 </body>
 </html>
