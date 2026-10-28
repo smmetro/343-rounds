@@ -169,7 +169,9 @@ function buildTestSheet_(rec, rows, prev) {
 }
 
 function exportSheetPdf_(ss, sh, name) {
-  const url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=pdf&size=letter&portrait=true&fitw=true' +
+  SpreadsheetApp.flush();
+  if (sh.getImages().length) Utilities.sleep(3000);   // let the signature image settle before export
+  const url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=pdf&size=letter&portrait=true&scale=4' +
     '&gridlines=false&printtitle=false&sheetnames=false&pagenum=UNDEFINED&fzr=false&horizontal_alignment=CENTER' +
     '&top_margin=0.4&bottom_margin=0.4&left_margin=0.4&right_margin=0.4&gid=' + sh.getSheetId();
   let resp;
@@ -224,18 +226,18 @@ function outOfRange_(v, lo, hi) { const n = Number(v); return lo !== undefined &
 
 function layoutGenerator_(sh, rec) {
   const V = rec.values || {}, sets = rec.sets || [], ats = rec.testType === 'ATS Transfer', lb = rec.testType === 'Load Bank';
-  const widths = [236, 76, 68, 68, 68, 68, 68, 68];
+  const widths = [236, 112, 62, 62, 62, 62, 62, 62];
   widths.forEach((w, i) => sh.setColumnWidth(i + 1, w));
   sh.getRange(1, 1, 80, 8).setFontFamily('Arial').setFontSize(9).setVerticalAlignment('middle').setNumberFormat('@');
-  sh.setRowHeights(1, 80, 15);   // compact rows so the whole log prints on one letter page
+  sh.setRowHeightsForced(1, 80, 15);   // compact rows so the whole log prints on one letter page
   let r = 1;
-  put_(sh, r, 1, '343 SANSOME STREET', {span: 8, bold: true, size: 15, align: 'center'}); sh.setRowHeight(r, 26); r++;
+  put_(sh, r, 1, '343 SANSOME STREET', {span: 8, bold: true, size: 15, align: 'center'}); sh.setRowHeightsForced(r, 1, 26); r++;
   put_(sh, r, 1, 'Emergency Generator Monthly Test Log' + (rec.status === 'incomplete' ? '  (INCOMPLETE)' : ''), {span: 8, size: 11, align: 'center', color: rec.status === 'incomplete' ? FLAG : null}); r++;
   const types = ['No-Load', 'ATS Transfer', 'Load Bank'].map(t => (rec.testType === t ? '☒ ' : '☐ ') + t).join('   ');
   put_(sh, r, 1, 'Date:  ' + mdy_(rec.date), {bold: true});
   put_(sh, r, 2, 'Test Type:  ' + types, {span: 5});
-  put_(sh, r, 7, 'Tester:  ' + (rec.testerName || ''), {span: 2}); sh.setRowHeight(r, 20); r++;
-  sh.setRowHeight(r, 6); r++;
+  put_(sh, r, 7, 'Tester:  ' + (rec.testerName || ''), {span: 2}); sh.setRowHeightsForced(r, 1, 20); r++;
+  sh.setRowHeightsForced(r, 1, 6); r++;
 
   // side-by-side: pre-run (A:B) | pre-start (C:H)
   const top = r;
@@ -256,9 +258,9 @@ function layoutGenerator_(sh, rec) {
       if (R.length === 1) put_(sh, row, 3, R[0], {span: 6, bold: true, bg: SEC_BG, box: true});
       else { put_(sh, row, 3, R[0], {span: 4, box: true}); put_(sh, row, 7, R[1] || '', {span: 2, align: 'center', box: true}); }
     }
-    sh.setRowHeight(row, L && L[0].length > 60 ? 24 : 15);
+    sh.setRowHeightsForced(row, 1, L && L[0].length > 60 ? 24 : 15);
   }
-  r = top + n; sh.setRowHeight(r, 6); r++;
+  r = top + n; sh.setRowHeightsForced(r, 1, 6); r++;
 
   // running readings grid
   put_(sh, r, 1, 'RUNNING READINGS', {span: 2, bold: true, bg: SEC_BG, box: true});
@@ -286,7 +288,7 @@ function layoutGenerator_(sh, rec) {
     put_(sh, r, 1, '   ' + x[0], {box: true}); put_(sh, r, 2, '', {box: true}); put_(sh, r, 3, x[1] || '', {align: 'center', box: true});
     put_(sh, r, 4, '', {span: 5, bg: '#f3f3f3', box: true}); r++;
   });
-  sh.setRowHeight(r, 6); r++;
+  sh.setRowHeightsForced(r, 1, 6); r++;
 
   // shutdown (A:B) | notes + tester (C:H)
   const runMin = V.g_start && V.g_stop ? Math.round((new Date(V.g_stop) - new Date(V.g_start)) / 60000) + ' min' : '';
@@ -297,7 +299,7 @@ function layoutGenerator_(sh, rec) {
   sd.forEach((x, i) => {
     if (x.length === 1) put_(sh, s0 + i, 1, x[0], {span: 2, bold: true, bg: SEC_BG, box: true});
     else { put_(sh, s0 + i, 1, x[0], {box: true}); put_(sh, s0 + i, 2, x[1] || '', {align: 'center', box: true}); }
-    sh.setRowHeight(s0 + i, 15);
+    sh.setRowHeightsForced(s0 + i, 1, 15);
   });
   const notesRows = sd.length - 4;
   put_(sh, s0, 3, 'NOTES', {span: 6, bold: true, bg: SEC_BG, box: true});
@@ -307,7 +309,7 @@ function layoutGenerator_(sh, rec) {
   put_(sh, s0 + 2 + notesRows, 3, 'Print name:  ' + (rec.testerName || ''), {span: 6, box: true});
   put_(sh, s0 + 3 + notesRows, 3, 'Signature:', {span: 4, box: true});
   put_(sh, s0 + 3 + notesRows, 7, 'Date: ' + mdy_(rec.date), {span: 2, box: true});
-  sh.setRowHeight(s0 + 3 + notesRows, 32);
+  sh.setRowHeightsForced(s0 + 3 + notesRows, 1, 32);
   const sig = sigBlob_(rec.tester);
   if (sig) { const im = sh.insertImage(sig, 3, s0 + 3 + notesRows, 70, 2); const h = 30, w = Math.round(im.getWidth() * h / im.getHeight()); im.setHeight(h).setWidth(w); }
   r = s0 + Math.max(sd.length, 4 + notesRows) + 1;
@@ -331,14 +333,14 @@ function layoutElevator_(sh, rec) {
   [330, 62, 62, 62, 62, 62, 62].forEach((w, i) => sh.setColumnWidth(i + 1, w));
   sh.getRange(1, 1, 60, 7).setFontFamily('Arial').setFontSize(10).setVerticalAlignment('middle').setNumberFormat('@');
   let r = 1;
-  put_(sh, r, 1, '343 SANSOME STREET', {span: 7, bold: true, size: 15, align: 'center'}); sh.setRowHeight(r, 26); r++;
+  put_(sh, r, 1, '343 SANSOME STREET', {span: 7, bold: true, size: 15, align: 'center'}); sh.setRowHeightsForced(r, 1, 26); r++;
   put_(sh, r, 1, 'SAN FRANCISCO, CA 94104', {span: 7, size: 9, align: 'center'}); r++;
-  put_(sh, r, 1, 'Monthly Phase I and Phase II Emergency Operations Test' + (rec.status === 'incomplete' ? '  (INCOMPLETE)' : ''), {span: 7, bold: true, size: 11, align: 'center', color: rec.status === 'incomplete' ? FLAG : null}); sh.setRowHeight(r, 24); r++;
+  put_(sh, r, 1, 'Monthly Phase I and Phase II Emergency Operations Test' + (rec.status === 'incomplete' ? '  (INCOMPLETE)' : ''), {span: 7, bold: true, size: 11, align: 'center', color: rec.status === 'incomplete' ? FLAG : null}); sh.setRowHeightsForced(r, 1, 24); r++;
   put_(sh, r, 1, 'Item', {bold: true, bg: HEAD_BG, box: true});
   ELEV.cars.forEach((c, i) => put_(sh, r, 2 + i, c === 'P' ? 'Parking\nCar P' : 'Car ' + c, {bold: true, bg: HEAD_BG, align: 'center', box: true}).setWrap(true));
-  sh.setRowHeight(r, 30); r++;
+  sh.setRowHeightsForced(r, 1, 30); r++;
   const section = (title, items, pfx) => {
-    put_(sh, r, 1, title, {bold: true, bg: SEC_BG, box: true}); sh.getRange(r, 2, 1, 6).setBackground(SEC_BG); box_(sh.getRange(r, 2, 1, 6)); sh.setRowHeight(r, 24); r++;
+    put_(sh, r, 1, title, {bold: true, bg: SEC_BG, box: true}); sh.getRange(r, 2, 1, 6).setBackground(SEC_BG); box_(sh.getRange(r, 2, 1, 6)); sh.setRowHeightsForced(r, 1, 24); r++;
     items.forEach(it => {
       put_(sh, r, 1, it[1], {box: true});
       ELEV.cars.forEach((c, i) => {
@@ -346,7 +348,7 @@ function layoutElevator_(sh, rec) {
         const cell = put_(sh, r, 2 + i, v, {align: 'center', box: true});
         if (v === 'F') cell.setFontColor(FLAG).setFontWeight('bold');
       });
-      sh.setRowHeight(r, 25); r++;
+      sh.setRowHeightsForced(r, 1, 25); r++;
     });
   };
   section('PHASE 1 OPERATION', ELEV.p1, 'p1');
@@ -354,16 +356,16 @@ function layoutElevator_(sh, rec) {
   section('RESET / RETURN TO NORMAL', ELEV.p3, 'p3');
   r++;
   // notes fill the rest of the page
-  put_(sh, r, 1, 'NOTES', {span: 7, bold: true, bg: SEC_BG, box: true}); sh.setRowHeight(r, 22); r++;
+  put_(sh, r, 1, 'NOTES', {span: 7, bold: true, bg: SEC_BG, box: true}); sh.setRowHeightsForced(r, 1, 22); r++;
   const notes = (rec.notes || []).join('\n');
   const nr = sh.getRange(r, 1, 1, 7).merge(); box_(nr);
   nr.setValue(notes).setWrap(true).setVerticalAlignment('top').setFontSize(notes.length > 1400 ? 7 : notes.length > 900 ? 8 : 10);
-  sh.setRowHeight(r, 190); r++;
-  sh.setRowHeight(r, 8); r++;
+  sh.setRowHeightsForced(r, 1, 190); r++;
+  sh.setRowHeightsForced(r, 1, 8); r++;
   put_(sh, r, 1, 'Date:  ' + mdy_(rec.date), {box: true});
   put_(sh, r, 2, 'Tester:  ' + (rec.testerName || ''), {span: 3, box: true});
   put_(sh, r, 5, 'Signature:', {span: 3, box: true}).setVerticalAlignment('middle');
-  sh.setRowHeight(r, 40);
+  sh.setRowHeightsForced(r, 1, 40);
   const sig = sigBlob_(rec.tester);
   if (sig) { const im = sh.insertImage(sig, 5, r, 66, 3); const h = 34, w = Math.round(im.getWidth() * h / im.getHeight()); im.setHeight(h).setWidth(Math.min(w, 120)); }
   r++;
@@ -396,6 +398,8 @@ function testFormsSelfCheck() {
   ['p1', 'p2', 'p3'].forEach(p => ELEV[p].forEach(it => ELEV.cars.forEach(c => { elev.values[p + '.' + it[0] + '.' + c] = '✓'; })));
   elev.values['p2.close_l.C'] = 'F';
   const root = folder_(DriveApp.getFolderById(TESTS.ROOT_ID), '_Self-check');
+  const old = root.getFiles(); while (old.hasNext()) old.next().setTrashed(true);   // replace earlier samples
+  if (!sigBlob_('scott') || !sigBlob_('jacky')) Logger.log('WARNING: sig_scott.png / sig_jacky.png not found in Rounds > ' + TESTS.ASSETS_FOLDER + '. Samples will have no signature.');
   [gen, elev].forEach(rec => {
     const name = 'SELF-CHECK ' + TESTS.NAMES[rec.form];
     const ss = SpreadsheetApp.create(name);

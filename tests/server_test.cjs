@@ -51,7 +51,7 @@ class Sheet {
   cell(r, c) { const k = r + ',' + c; if (r > this.maxR || c > this.maxC) throw new Error('cell outside sheet ' + k); return this.cells[k] || (this.cells[k] = {v: ''}); }
   getRange(r, c, nr, nc) { if (typeof r === 'string') { const m = /^([A-Z]):([A-Z])$/.exec(r); return new Range(this, 1, m[1].charCodeAt(0) - 64, this.maxR, m[2].charCodeAt(0) - m[1].charCodeAt(0) + 1); } return new Range(this, r, c, nr, nc); }
   getName() { return this.name; } setName(n) { this.name = n; return this; } getSheetId() { return this.id; }
-  setColumnWidth(c, w) { this.widths[c] = w; return this; } setRowHeights(r, n, h) { for (let i = 0; i < n; i++) this.heights[r + i] = h; return this; } setRowHeight(r, h) { this.heights[r] = h; return this; }
+  setColumnWidth(c, w) { this.widths[c] = w; return this; } setRowHeightsForced(r, n, h) { return this.setRowHeights(r, n, h); } setRowHeights(r, n, h) { for (let i = 0; i < n; i++) this.heights[r + i] = h; return this; } setRowHeight(r, h) { this.heights[r] = h; return this; }
   getImages() { return this.images.slice(); } clear() { this.cells = {}; return this; } clearFormats() { return this; }
   getMaxRows() { return this.maxR; } getMaxColumns() { return this.maxC; } setHiddenGridlines() { return this; }
   insertImage(blob, c, r, ox, oy) { const sh = this; const im = {c, r, ox, oy, w: 800, h: 367, getWidth() { return this.w; }, getHeight() { return this.h; },

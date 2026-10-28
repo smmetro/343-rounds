@@ -19,7 +19,7 @@
 // a name, and renaming a reading keeps its history in place.
 // ============================================================
 
-const VERSION = '2.1.0';
+const VERSION = '2.1.1';
 
 const CONFIG = {
   CLIENT_ID: '1029316106419-u8cc3mq65a5fos9gp3074d0bbfkvsgsr.apps.googleusercontent.com',

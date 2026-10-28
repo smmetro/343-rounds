@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.1.1 server (2026-10-28)
+- Generator and Elevator PDFs export fit-to-page (Generator was spilling onto a second page)
+- Row heights locked so wrapped text can't push the page longer; wider value column on the Generator sheet
+- Short pause before PDF export so the signature image is included
+- testFormsSelfCheck replaces its earlier samples and warns if signature files are missing
+
 ## v2.1.0 (2026-10-26)
 Test forms: Elevator Phase I & II, Generator Monthly, Diesel Fire Pump Weekly, Electric Fire Pump Monthly.
 - New "Tests" section on the home screen; Past Tests list to edit or reprint any saved test
