@@ -1,0 +1,8 @@
+{
+  "name": "343-rounds",
+  "private": true,
+  "description": "Rounds app for 343 Sansome St.",
+  "scripts": {
+    "test": "node tests/server_test.cjs && python3 tests/app_test.py"
+  }
+}
