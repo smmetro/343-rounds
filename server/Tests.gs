@@ -226,13 +226,13 @@ function outOfRange_(v, lo, hi) { const n = Number(v); return lo !== undefined &
 
 function layoutGenerator_(sh, rec) {
   const V = rec.values || {}, sets = rec.sets || [], ats = rec.testType === 'ATS Transfer', lb = rec.testType === 'Load Bank';
-  const widths = [236, 112, 62, 62, 62, 62, 62, 62];
+  const widths = [236, 130, 59, 59, 59, 59, 59, 59];
   widths.forEach((w, i) => sh.setColumnWidth(i + 1, w));
   sh.getRange(1, 1, 80, 8).setFontFamily('Arial').setFontSize(9).setVerticalAlignment('middle').setNumberFormat('@');
   sh.setRowHeightsForced(1, 80, 15);   // compact rows so the whole log prints on one letter page
   let r = 1;
   put_(sh, r, 1, '343 SANSOME STREET', {span: 8, bold: true, size: 15, align: 'center'}); sh.setRowHeightsForced(r, 1, 26); r++;
-  put_(sh, r, 1, 'Emergency Generator Monthly Test Log' + (rec.status === 'incomplete' ? '  (INCOMPLETE)' : ''), {span: 8, size: 11, align: 'center', color: rec.status === 'incomplete' ? FLAG : null}); r++;
+  put_(sh, r, 1, 'Emergency Generator Monthly Test Log' + (rec.status === 'incomplete' ? '  (INCOMPLETE)' : ''), {span: 8, size: 11, align: 'center', color: rec.status === 'incomplete' ? FLAG : null}); sh.setRowHeightsForced(r, 1, 20); r++;
   const types = ['No-Load', 'ATS Transfer', 'Load Bank'].map(t => (rec.testType === t ? '☒ ' : '☐ ') + t).join('   ');
   put_(sh, r, 1, 'Date:  ' + mdy_(rec.date), {bold: true});
   put_(sh, r, 2, 'Test Type:  ' + types, {span: 5});
@@ -243,7 +243,7 @@ function layoutGenerator_(sh, rec) {
   const top = r;
   const left = [['PRE-RUN PROCEDURE']].concat([
     ['Security notified of generator test', V.g_sec], ['Siemens monitoring: supervisories on ignore', V.g_sie], ['Basement ATS: no active alarms', V.g_atsal],
-    ['General condition: generator / day tank', V.g_cond1], ['General condition: Radiator Cooling Fan 1,\nGenerator Cooling Fan 1, Generator Cooling Pump 1', V.g_cond2]]);
+    ['General condition: generator / day tank', V.g_cond1], ['General condition: Radiator Cooling Fan 1,\nGenerator Cooling Fan 1,\nGenerator Cooling Pump 1', V.g_cond2]]);
   if (ats) left.push(['ATS TRANSFER'], ['ATS-1', V.g_ats1], ['ATS-2', V.g_ats2]);
   const right = [['PRE-START READINGS'], ['Control switch status', V.g_ctl], ['Battery (VDC)', V.g_bat], ['Engine coolant level', V.g_cool], ['Oil level', V.g_oillvl],
     ['Block heater temp (°F)', V.g_blk], ['Day tank fuel level (pre)', V.g_day], ['Hours (start)', V.g_hrs1]];
@@ -252,13 +252,17 @@ function layoutGenerator_(sh, rec) {
     const row = top + i, L = left[i], R = right[i];
     if (L) {
       if (L.length === 1) put_(sh, row, 1, L[0], {span: 2, bold: true, bg: SEC_BG, box: true});
-      else { put_(sh, row, 1, L[0], {box: true, size: L[0].length > 60 ? 8 : 9}).setWrap(true); put_(sh, row, 2, L[1] || '', {align: 'center', box: true}); }
+      else {
+        const multi = L[0].indexOf('\n') !== -1;
+        put_(sh, row, 1, L[0], {box: true, size: multi ? 8 : 9}).setWrap(multi);
+        put_(sh, row, 2, L[1] || '', {align: 'center', box: true, size: String(L[1] || '').length > 14 ? 8 : 9});
+      }
     }
     if (R) {
       if (R.length === 1) put_(sh, row, 3, R[0], {span: 6, bold: true, bg: SEC_BG, box: true});
       else { put_(sh, row, 3, R[0], {span: 4, box: true}); put_(sh, row, 7, R[1] || '', {span: 2, align: 'center', box: true}); }
     }
-    sh.setRowHeightsForced(row, 1, L && L[0].length > 60 ? 24 : 15);
+    sh.setRowHeightsForced(row, 1, L && L[0].indexOf('\n') !== -1 ? 36 : 15);
   }
   r = top + n; sh.setRowHeightsForced(r, 1, 6); r++;
 

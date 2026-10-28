@@ -90,14 +90,15 @@ Server actions: `testSync`, `testAssets`, `submitTest` (Tests.gs). `testFormsSel
 If the state revises an AES form: run `tools/build_masters.py` on the new PDFs, check row lists, upload the new masters to Test Form Assets.
 
 ## Deploying changes
-- **Server:** paste Code.gs > Save > run `setup` if told to > Deploy > **Manage deployments** > pencil > Version: **New version** > Deploy. Never use "New deployment" (it changes the URL).
-- **App:** upload index.html / admin.html / sw.js to GitHub. Bump `APP_VERSION` in index.html so phones show the "Update" banner.
+- **Server:** paste Code.gs and Tests.gs > Save > run `setup` if the changelog says to > Deploy > **Manage deployments** > pencil > Version: **New version** > Deploy. Never use "New deployment" (it changes the URL).
+- **App:** Claude pushes a branch to GitHub and opens a pull request. Deploy the server first, then merge the pull request into `main` (merging publishes the app). Bump `APP_VERSION` in index.html so phones show the "Update" banner.
 - GitHub Pages caches for up to 10 minutes.
 
 ## Server functions you may run by hand
 | Function | Use |
 |---|---|
 | `setup` | After pasting a new Code.gs. Safe to re-run. |
+| `testFormsSelfCheck` | Builds sample Generator and Elevator Sheets + PDFs in Testing & Inspections > _Self-check (replaces earlier samples). |
 | `importHistory` | One time: imports rounds-migration.json from the Rounds folder. Refuses if tabs already have data. |
 | `removeConnectionTest` | Deletes the Connection Test tab. |
 
@@ -119,5 +120,26 @@ If the state revises an AES form: run `tools/build_masters.py` on the new PDFs, 
 2. Old Sheet (343sansomestreet@gmail.com): keep read-only as archive.
 3. Pause or delete the Supabase project.
 
-## Tests (kept in the build workspace)
-Simulated Google services run the real Code.gs: 45 server checks, 32 phone checks (iPhone 13 and small-phone sizes, offline, resume, photos), 11 admin checks.
+## Repo layout
+| Path | What |
+|---|---|
+| `index.html`, `admin.html`, `sw.js` | Published by GitHub Pages (must stay at the root) |
+| `forms.js`, `forms-defs.js`, `forms-layout.js`, `vendor/` | Test forms (published with the app) |
+| `server/Code.gs`, `server/Tests.gs` | Copies of the two Apps Script files. Keep them in sync with Apps Script. |
+| `tools/build_masters.py` | Rebuilds blank AES fire pump masters + forms-layout.js from the state PDFs |
+| `tests/` | Automated tests, see tests/README.md |
+| `CHANGELOG.md` | What changed in each version |
+
+The repo is public. Never commit building data (readings, notes, exports), blank forms with building info, or signatures.
+`tools/build_migration.py` (one-time v1 to v2 import) was never committed to GitHub; the migration is done.
+
+## Making a new version
+1. New chat in the Rounds project; describe the change.
+2. Claude pulls the repo, makes the change, runs `npm test`.
+3. Bump `APP_VERSION` in index.html (and `VERSION` in Code.gs if the server changed).
+4. Claude pushes a branch and opens a pull request. Paste Code.gs / Tests.gs into Apps Script and deploy a New version, then merge the pull request.
+5. Add a CHANGELOG entry.
+
+## Tests
+`npm test` runs `tests/server_test.cjs` (the real Code.gs + Tests.gs against simulated Google services, 40 checks) and `tests/app_test.py` (the phone app at iPhone size against a simulated server, 70 checks, including rounds). See tests/README.md. Needs `tests/fixtures/` copies of the four Test Form Assets files (never committed).
+The earlier v2.0 suite (88 checks, admin panel included) lived only in a build workspace and was not saved; admin panel checks are not covered yet.
