@@ -318,6 +318,7 @@ function startChainedElectric(){
   const chainDone=Object.keys(T.v).filter(k=>/^(p_|start_)/.test(k));
   const marks={'1.5':T.v['1.5']};if(T.v.p_knife)marks['1.35']='P';if(T.v.p_jtest)marks['1.36']='P';
   const carry=TS.filter(s=>s.id==='1.5').length?T.defs.filter(d=>d.item==='1.5').map(d=>Object.assign({},d,{id:uid('d')})):[];
+  Object.entries(FP_CARRY).forEach(([dk,ek])=>{if(T.v[dk]!=null&&T.v[dk]!==''){marks[ek]=T.v[dk];T.defs.filter(d=>d.item===dk).forEach(d=>carry.push(Object.assign({},d,{id:uid('d'),item:ek})));}});
   T={id:uid('t'),form:'electric',mode:'new',chained:true,held,chainDone,t0:new Date().toISOString(),date:today(),tester:testerOf(),v:Object.assign({},marks),defs:carry,notes:[],sets:[],idx:0};
   saveT();TS=buildSteps(T);renderTest();toast('Diesel test held. Electric test started.');
 }
