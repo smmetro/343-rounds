@@ -76,9 +76,11 @@ const FP_PROC={
 const FP_UNDO={p_mon:['r_ann'],p_sec:['r_sec'],p_valves:['r_valves'],p_fans:['r_fans'],p_knife:['r_auto'],p_dieseloff:['r_auto'],c_knife:['r_auto'],
   start_diesel:['r_hoa','r_auto'],start_electric:['r_knife','r_auto']};
 
-const DIESEL_PRE=['1.6','1.7','1.8','1.9','1.10','1.11','1.12','1.13','1.14','suction','1.15','system','1.16','1.17','1.34','1.37','1.40','1.41','1.42','1.43','1.44','1.45','1.46','1.47',
+const DIESEL_PRE=['1.6','1.7','1.8','1.9','1.10','1.11','1.12','1.13','1.14','suction','1.15','system','1.16','1.17','1.25','1.34','1.37','1.40','1.41','1.42','1.43','1.44','1.45','1.46','1.47',
   '1.51','1.52','1.53','1.56','1.57','1.58','1.61','1.62','1.63','1.64','1.65','1.66'];
-const DIESEL_RUN=['1.48','1.20','1.22','1.27','1.28','1.18','1.19','1.21','1.23','1.24','1.25','1.26','1.30','1.31a','1.31b','1.31c','1.49','1.59','1.60','1.32','1.33'];
+const DIESEL_RUN=['1.48','1.20','1.22','1.27','1.28','1.18','1.19','1.21','1.23','1.24','1.26','1.31a','1.31b','1.31c','1.49','1.59','1.60','1.32','1.33'];
+// Chained diesel -> electric: diesel pre-check results carried onto the electric form (diesel item : electric item)
+const FP_CARRY={'1.6':'1.6','1.7':'1.7','1.9':'1.9','1.12':'1.11','1.13':'1.12'};
 const ELECTRIC_PRE=['1.6','1.7','1.8','1.9','1.10','1.11','1.12','1.13','suction','1.14','system','1.15','1.16','1.26','1.29','1.35'];
 const ELECTRIC_RUN=['1.27','1.18','1.19','1.24','1.20','1.21','1.22','1.23','1.25','1.28','1.17'];
 
@@ -139,6 +141,7 @@ function buildDieselSteps(T){
   S.push({id:'start_diesel',kind:'event',sec:'Start',label:'Start the diesel fire pump',desc:'Drop pressure at the test valve beneath the diesel fire pump controller.',btn:'Pump started',gate:true});
   DIESEL_RUN.forEach(k=>S.push(fpItemStep('diesel',k,'While running')));
   proc('r_hoa','End of test');
+  S.push(fpItemStep('diesel','1.30','End of test'));
   S.push({id:'q_chain',kind:'chain',sec:'End of test',label:'Running the Electric Monthly next?',desc:'Yes: the diesel stays Off, the standpipe valves stay closed and the fans stay on. The electric test starts next and everything is restored at the end.',gate:true});
   if(T.v.q_chain!=='Yes')['r_valves','r_fans','r_auto','r_ann','r_sec'].forEach(id=>proc(id,'Restore to normal'));
   return S;
@@ -151,7 +154,7 @@ function buildElectricSteps(T){
     S.push({id:'p_fans',kind:'procpf',sec:P,label:FP_PROC.p_fans,marks:'1.5',num:'1.5',gate:true});
     proc('p_dieseloff',P);proc('p_jauto',P);
     S.push({id:'p_jtest',kind:'procpf',sec:P,label:FP_PROC.p_jtest,marks:'1.36',num:'1.36',gate:true});}
-  ELECTRIC_PRE.forEach(k=>{if(k==='1.35'&&T.chained)return;S.push(fpItemStep('electric',k,'Pre-checks'));});
+  ELECTRIC_PRE.forEach(k=>{if(T.chained&&(k==='1.35'||Object.values(FP_CARRY).includes(k)))return;S.push(fpItemStep('electric',k,'Pre-checks'));});
   S.push({id:'start_electric',kind:'event',sec:'Start',label:'Start the electric fire pump',desc:'Open the sensing line valve at the electric fire pump controller.',btn:'Pump started',gate:true});
   ELECTRIC_RUN.forEach(k=>S.push(fpItemStep('electric',k,'While running')));
   const R='Restore to normal';

@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.1.2 app (2026-11-05)
+Fire pump changes (app only, no server deploy needed)
+- Diesel: 1.25 Pressure Relief Valve (No Flow) moved to pre-checks (1.63 Exhaust Leakage was already a pre-check)
+- Diesel: 1.30 Record Time Pump Runs After Starting moved to end of test, right after the pump stops automatically
+- Chained diesel into electric: diesel results carry onto the electric form and are not asked again (pass or fail, with any D / C entry): diesel 1.6 > electric 1.6, 1.7 > 1.7, 1.9 > 1.9, 1.12 Piping Free of Leaks > 1.11, 1.13 Suction Reservoir Full > 1.12
+- Standalone electric test unchanged
+
 ## v2.1.1 server (2026-10-28)
 - Generator and Elevator PDFs export fit-to-page (Generator was spilling onto a second page)
 - Row heights locked so wrapped text can't push the page longer; wider value column on the Generator sheet
