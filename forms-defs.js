@@ -23,7 +23,7 @@ const DIESEL_ITEMS={
  '1.37':'Electrical System: General Inspection','1.38':'Reverse Phase Alarm Pilot Light','1.39':'Oil Level in Vertical Motor Sight Glass','1.40':'Power to Pressure Maintenance (Jockey) Pump is Provided',
  '1.41':'Controller Selector Switch is in "Auto" Position','1.42':'Batteries (2) Voltage Readings are Within Acceptable Range','1.43':'Batteries (2) Charging Current Readings are Within Acceptable Range',
  '1.44':'Batteries (2) Pilot Lights are On or Battery Failure (2) Lights are Off','1.45':'All Alarm Pilot Lights are Off','1.46':'Electrolyte Level in Batteries is Within Acceptable Range',
- '1.47':'Battery Terminals are Free from Corrosion','1.48':'Cranking Voltage','1.49':'Engine Running Time Meter is Reading','1.50':'Oil Level in Right Angle Gear Drive',
+ '1.47':'Battery Terminals are Free from Corrosion','1.48':'Cranking Voltage','1.49':'Engine Time Meter Reading','1.50':'Oil Level in Right Angle Gear Drive',
  '1.51':'Cooling Water Level is within Acceptable Range','1.52':'Water Jacket Heater is Operating','1.53':'Fuel: Tank Level','1.54':'Fuel: Tank Float Switch','1.55':'Fuel: Solenoid Valve Operation',
  '1.56':'Fuel: Flexible Hoses and Connectors','1.57':'Lubrication System: Oil Level is within Acceptable Range','1.58':'Cooling System: Level','1.59':'Cooling System: Adequate Cooling Water to Heat Exchanger',
  '1.60':'Cooling System: Water Pumps','1.61':'Cooling System: Condition of Flexible Hoses and Connections','1.62':'Cooling System: Jacket Water Heater','1.63':'Exhaust System: Leakage',
@@ -43,11 +43,11 @@ const ELECTRIC_ITEMS={
  '1.36':'Power to Pressure Maintenance (Jockey) Pump is Provided','1.37':'System Returned to Service'
 };
 const NUM_ITEMS={ // fire pump items entered as numbers
- diesel:{suction:'psi',system:'psi','1.18':'psi','1.19':'psi','1.27':'sec','1.28':'sec','1.30':'min','1.31a':'psi','1.31b':'rpm','1.31c':'°F'},
+ diesel:{suction:'psi',system:'psi','1.18':'psi','1.19':'psi','1.27':'sec','1.28':'sec','1.30':'min','1.31a':'psi','1.31b':'rpm','1.31c':'°F','1.49':'hrs'},
  electric:{suction:'psi',system:'psi','1.18':'sec','1.20':'psi','1.21':'psi','1.27':'sec','1.28':'min'}
 };
 const FP_PREFILL={diesel:{'1.1':'160','1.2':'185','1.3':'203','1.4':'225'},electric:{'1.1':'162','1.2':'182','1.3':'203','1.4':'225'}};
-const FP_NA={diesel:['1.29','1.31d','1.35','1.36','1.38','1.39','1.50','1.54','1.55','1.67'],electric:['1.30','1.31','1.32','1.33','1.34']};
+const FP_NA={diesel:['1.16','1.29','1.31d','1.35','1.36','1.38','1.39','1.50','1.54','1.55','1.67'],electric:['1.30','1.31','1.32','1.33','1.34']};
 const FP_HINT={
  diesel:{'1.48':'12 V system: below 9 V = Fail','1.53':'Pick the tank level as read on the gauge'},
  electric:{'1.28':'Required: 10 min. Under 10 is marked Fail.'}
@@ -76,10 +76,12 @@ const FP_PROC={
 const FP_UNDO={p_mon:['r_ann'],p_sec:['r_sec'],p_valves:['r_valves'],p_fans:['r_fans'],p_knife:['r_auto'],p_dieseloff:['r_auto'],c_knife:['r_auto'],
   start_diesel:['r_hoa','r_auto'],start_electric:['r_knife','r_auto']};
 
-const DIESEL_PRE=['1.6','1.7','1.8','1.9','1.10','1.11','1.12','1.13','1.14','suction','1.15','system','1.16','1.17','1.25','1.34','1.37','1.40','1.41','1.42','1.43','1.44','1.45','1.46','1.47',
-  '1.51','1.52','1.53','1.56','1.57','1.58','1.61','1.62','1.63','1.64','1.65','1.66'];
-const DIESEL_RUN=['1.48','1.20','1.22','1.27','1.28','1.18','1.19','1.21','1.23','1.24','1.26','1.31a','1.31b','1.31c','1.49','1.59','1.60','1.32','1.33'];
+const DIESEL_PRE=['1.6','1.7','1.8','1.9','1.10','1.11','1.12','1.13','1.14','suction','1.15','system','1.17','1.24','1.25','1.34','1.37','1.40','1.41','1.42','1.43','1.44','1.45','1.46','1.47',
+  '1.51','1.52','1.53','1.56','1.57','1.58','1.61','1.64','1.65','1.66'];
+const DIESEL_RUN=['1.48','1.20','1.22','1.27','1.28','1.18','1.19','1.21','1.23','1.26','1.31a','1.31b','1.31c','1.49','1.59','1.60','1.63','1.32','1.33'];
 // Chained diesel -> electric: diesel pre-check results carried onto the electric form (diesel item : electric item)
+// Diesel 1.62 (Jacket Water Heater) is not asked; it copies 1.52's answer and any D / C entry
+const FP_COPY={diesel:{'1.62':'1.52'}};
 const FP_CARRY={'1.6':'1.6','1.7':'1.7','1.9':'1.9','1.12':'1.11','1.13':'1.12'};
 const ELECTRIC_PRE=['1.6','1.7','1.8','1.9','1.10','1.11','1.12','1.13','suction','1.14','system','1.15','1.16','1.26','1.29','1.35'];
 const ELECTRIC_RUN=['1.27','1.18','1.19','1.24','1.20','1.21','1.22','1.23','1.25','1.28','1.17'];
@@ -138,7 +140,7 @@ function buildDieselSteps(T){
   S.push({id:'p_fans',kind:'procpf',sec:P,label:FP_PROC.p_fans,marks:'1.5',num:'1.5',gate:true});
   proc('p_knife',P);proc('p_jauto',P);proc('p_jtest',P);
   DIESEL_PRE.forEach(k=>S.push(fpItemStep('diesel',k,'Pre-checks')));
-  S.push({id:'start_diesel',kind:'event',sec:'Start',label:'Start the diesel fire pump',desc:'Drop pressure at the test valve beneath the diesel fire pump controller.',btn:'Pump started',gate:true});
+  S.push({id:'start_diesel',kind:'event',sec:'Start',label:'Start the diesel fire pump',desc:'Drop pressure at the test valve beneath the diesel fire pump controller.',hint:'⚠ Be prepared to read cranking voltage upon start',hintWarn:true,btn:'Pump started',gate:true});
   DIESEL_RUN.forEach(k=>S.push(fpItemStep('diesel',k,'While running')));
   proc('r_hoa','End of test');
   S.push(fpItemStep('diesel','1.30','End of test'));

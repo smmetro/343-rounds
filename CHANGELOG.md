@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.1.3 app (2026-11-05)
+Diesel fire pump changes (app only, no server deploy needed)
+- Start step shows a highlighted warning: "Be prepared to read cranking voltage upon start"
+- 1.24 Circulation Relief Valve (No Flow) moved to pre-checks
+- 1.63 Exhaust System Leakage moved to while running (after 1.60)
+- 1.62 Jacket Water Heater no longer asked; copies 1.52 Water Jacket Heater (P / F and any D / C entry)
+- 1.49 renamed "Engine Time Meter Reading"; now a number with decimal, prints as hours on the form
+- 1.16 Wet Pit Suction Screens removed; prints N/A
+
 ## v2.1.2 app (2026-11-05)
 Fire pump changes (app only, no server deploy needed)
 - Diesel: 1.25 Pressure Relief Valve (No Flow) moved to pre-checks (1.63 Exhaust Leakage was already a pre-check)

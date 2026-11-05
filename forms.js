@@ -120,7 +120,7 @@ function renderTest(){
   $('t-label').textContent=s.label;
   const d=$('t-desc');d.textContent=s.desc||'';d.style.display=s.desc?'':'none';
   const hint=s.hint||(s.lo!==undefined?'Normal: '+s.lo+' to '+s.hi+' '+(s.unit||''):'');
-  const h=$('t-hint');h.textContent=hint;h.style.display=hint?'':'none';
+  const h=$('t-hint');h.textContent=hint;h.style.display=hint?'':'none';h.classList.toggle('strong',!!s.hintWarn);
   const area=$('t-input');area.innerHTML='';
   const kp=$('t-keypad');kp.style.display='none';
   const v=T.v[s.id];
@@ -393,7 +393,9 @@ function makeRecord(D,status){
     Object.keys(rec.values).forEach(k=>{if(/^s\d+\./.test(k))delete rec.values[k];});}
   if(f.kind==='aes'){rec.cycle=D.cycle||fpCycleFor(D.form,D.date,rec.id);
     if(status==='complete'&&D.mode!=='edit')rec.values[D.form==='diesel'?'1.68':'1.37']='P';
-    if(D.form==='diesel'&&D.v.q_chain==='Yes')delete rec.values['1.68'];}
+    if(D.form==='diesel'&&D.v.q_chain==='Yes')delete rec.values['1.68'];
+    Object.entries(FP_COPY[D.form]||{}).forEach(([to,from])=>{rec.defs=rec.defs.filter(d=>d.item!==to);delete rec.values[to];
+      if(rec.values[from]!==undefined&&rec.values[from]!==''){rec.values[to]=rec.values[from];rec.defs.filter(d=>d.item===from).forEach(d=>rec.defs.push(Object.assign({},d,{id:uid('d'),item:to})));}});}
   return rec;
 }
 async function saveTest(){
@@ -536,6 +538,7 @@ async function buildAesPdf(form,recs){
   const css=document.createElement('style');
   css.textContent='#s-test.active{height:100vh;height:100dvh;overflow:hidden}.t-num{display:inline-block;background:var(--surf2);border:1px solid var(--bdr);border-radius:8px;padding:3px 9px;font-size:12px;font-weight:800;color:var(--acc);align-self:flex-start}'+
    '.t-hint{font-size:13px;color:#c9a227;background:rgba(201,162,39,.08);border:1px solid rgba(201,162,39,.3);border-radius:10px;padding:7px 10px}'+
+   '.t-hint.strong{font-size:15px;font-weight:800;color:var(--warn);background:rgba(243,156,18,.14);border:2px solid var(--warn);padding:10px 12px}'+
    '.t-cancel{color:var(--danger);font-size:13px;font-weight:700;padding:6px 0}#s-treview .body,#s-tlist .body{flex:1;overflow-y:auto;padding:12px 16px}'+
    '.dc{display:flex;gap:8px}.dc .opt{flex:1;padding:12px}';
   document.head.appendChild(css);
