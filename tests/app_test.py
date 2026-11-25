@@ -39,6 +39,8 @@ class Server:
         self.calls.append(req)
         if self.offline and a in ('submitTest', 'testSync', 'testAssets', 'bootstrap'):
             return route.abort()
+        if getattr(self, 'offline_rounds', False) and a == 'submitRound':
+            return route.abort()
         if a == 'bootstrap':
             body = {'ok': True, 'version': '2.1.0', 'user': USER, 'session': 'tok', 'building': '343 Sansome St.', 'configVersion': 1,
                     'templates': [TEMPLATE], 'history': {}, 'lastNotes': {}, 'lastRound': {}}
@@ -79,7 +81,8 @@ window.__run = async function(answers, opts){
     if (s.kind === 'hub') {
       const want = opts.sets || 1;
       if ((T.sets||[]).length < want) { addSet(); continue; }
-      testNext(); continue;
+      if (T.mode === 'edit') { testNext(); continue; }
+      const c = window.confirm; window.confirm = () => true; endReadings(); window.confirm = c; continue;
     }
     if (v === undefined) {
       if (s.kind === 'proc') v = 'Done';
@@ -142,6 +145,7 @@ def t_home_and_rounds(page, srv):
     page.click('#nav-next'); page.click('.opt >> text=Running'); page.wait_for_selector('#s-review.active', timeout=5000)
     page.click('#submit-btn'); page.wait_for_selector('#s-done.active')
     wait_sent(page)
+    check('round start reported to server', any(c['action'] == 'roundStarted' for c in srv.calls))
     check('round submitted', any(c['action'] == 'submitRound' for c in srv.calls))
     check('done title says round', page.text_content('#done-title') == 'Round saved')
     page.evaluate("goRounds()")
@@ -150,9 +154,9 @@ def t_diesel(page, srv):
     print('Diesel weekly: UI clicks, fail entry, PDF')
     page.evaluate("startTest('diesel')")
     page.wait_for_selector('#s-test.active')
-    check('first step is monitoring company', 'Monitoring company' in page.text_content('#t-label'))
+    check('first step is monitoring company', 'Monitoring Company' in page.text_content('#t-label'))
     page.click('#t-next')
-    check('procedure step blocks Next', 'Monitoring company' in page.text_content('#t-label'))
+    check('procedure step blocks Next', 'Monitoring Company' in page.text_content('#t-label'))
     page.click('.opt >> text=Done ✓'); page.wait_for_timeout(450)
     check('Done moves on', 'Notify Security' in page.text_content('#t-label'))
     page.evaluate("for(let i=0;i<2;i++){setT(curStep(),'Done');testNext();}")
@@ -168,6 +172,8 @@ def t_diesel(page, srv):
     check('start step warns about cranking voltage', 'cranking voltage' in page.evaluate("TS.find(s=>s.id==='start_diesel').hint"))
     hidden = page.evaluate("['1.29','1.31d','1.35','1.36','1.38','1.39','1.50','1.54','1.55','1.67'].filter(k=>TS.some(s=>s.id===k))")
     check('N/A items hidden from tester', hidden == [], hidden)
+    check('cranking voltage warning gives the 9 V limit', 'Below 9 V = Fail' in page.evaluate("TS.find(s=>s.id==='start_diesel').hint"))
+    check('jockey test marks 1.40; 1.40 not asked again', page.evaluate("TS.find(s=>s.id==='p_jtest').marks==='1.40'&&TS.filter(s=>s.id==='1.40').length===0"))
     r = page.evaluate("__run({'1.22':'F','def:1.22':'Slight vibration at outboard bearing','1.18':'12','1.19':'215','1.27':'3','1.28':'4','1.30':'30','1.31a':'64','1.31b':'1781','1.31c':'174','1.49':'1234.5','suction':'45','system':'215','1.53':'7/8'})")
     check('diesel reaches review', r == 's-treview', r)
     page.click('#tr-save'); page.wait_for_selector('#s-done.active')
@@ -176,6 +182,7 @@ def t_diesel(page, srv):
     sub = srv.submits('diesel')[-1]
     rec = sub['record']
     check('record has 1.68 P', rec['values'].get('1.68') == 'P')
+    check('1.40 passed from jockey test', rec['values'].get('1.40') == 'P')
     check('1.62 copies 1.52', rec['values'].get('1.62') == rec['values'].get('1.52') and rec['values'].get('1.52') is not None)
     check('record keeps deficiency', any(d['item'] == '1.22' and d['dc'] == 'D' for d in rec['defs']))
     check('cycle is the month', rec['cycle'] == rec['date'][:7], rec['cycle'])
@@ -196,6 +203,9 @@ def t_chain(page, srv):
     page.evaluate("startTest('diesel')")
     r = page.evaluate("__run({'q_chain':'Yes'}, {stopAt:'c_knife'})")
     check('chain moves to electric', r == 'stopped' and page.evaluate("T.form") == 'electric', r)
+    check('electric starts with HOA Off confirmation', page.evaluate("TS[0].id+'|'+TS[0].label") == 'c_hoa|Confirm diesel controller HOA switch is in Off' and page.evaluate("TS[1].id") == 'c_knife')
+    check('electric 1.15 wet pit screens N/A, not asked', not page.evaluate("TS.some(s=>s.id==='1.15')"))
+    check('electric start warns to prepare stopwatch', 'Prepare stopwatch' in page.evaluate("TS.find(s=>s.id==='start_electric').hint"))
     check('electric carries 1.5/1.35/1.36', page.evaluate("[T.v['1.5'],T.v['1.35'],T.v['1.36']].join()") == 'P,P,P')
     check('electric carries diesel pre-checks', page.evaluate("[T.v['1.6'],T.v['1.7'],T.v['1.9'],T.v['1.11'],T.v['1.12']].every(x=>x==='P')"))
     check('carried items not asked again', not page.evaluate("TS.some(s=>['1.6','1.7','1.9','1.11','1.12'].includes(s.id))"))
@@ -257,34 +267,80 @@ def t_cancel(page, srv):
     check('discard with nothing done needs no restore', page.evaluate("T") is None and len(srv.submits()) == n)
 
 def t_generator(page, srv):
-    print('Generator: ATS test, reading sets, same as last, flags')
+    print('Generator: ATS test, reading sets, choice after each set, flags')
     page.evaluate("startTest('generator')")
-    page.evaluate("__run({'g_type':'ATS Transfer','g_ats2':'N/A','g_bat':'27.6','g_hrs1':'1284.2'}, {stopAt:'g_hub'})")
-    check('at hub', page.evaluate("curStep().kind") == 'hub')
-    page.click('text=+ Add Reading Set')
+    pre = page.evaluate("TS.filter(s=>s.sec==='Pre-run procedure').map(s=>s.id)")
+    check('pre-run condition checks split into three', pre[-3:] == ['g_cond_rcf', 'g_cond_gcf', 'g_cond_gcp'], pre)
+    page.evaluate("__run({'g_type':'ATS Transfer','g_ats2':'N/A','g_bat':'27.6','g_hrs1':'1284.2'}, {stopAt:'g_start'})")
+    check('start warns to prepare stopwatch', 'Prepare to start stopwatch' in page.text_content('#t-hint'))
+    page.evaluate("__run({'g_ats2':'N/A'}, {stopAt:'g_hub'})")
+    check('at reading sets screen', page.evaluate("curStep().kind") == 'hub')
+    check('no End button before the first set', page.locator('#hub-end').count() == 0)
+    page.click('#hub-add')
     check('set 1 first field is oil (no kW on ATS test)', page.evaluate("curStep().field") == 'oil')
+    check('labels title case on screen', page.text_content('#t-label') == 'Oil Pressure')
     for k in '46':
         page.click('#t-keypad .key >> text="%s"' % k)
     check('keypad entry', page.evaluate("T.v['s0.oil']") == '46')
-    page.evaluate("__run({'s0.ehx_ci':'168'}, {stopAt:'g_hub'})")
-    page.click('text=+ Add Reading Set')
+    order = page.evaluate("TS.filter(s=>s.set===0).map(s=>s.field)")
+    check('set order', order == ['oil','ect','hz','v_ab','v_bc','v_ac','a_a','a_b','a_c','ehx_co','ehx_ci','ehx_ri','ehx_ro','c_cool','c_rcf','fhx_i','fhx_o','fuel_sup','gcp_s','gcp_d','c_gcf'], order)
+    labels = page.evaluate("TS.filter(s=>s.set===0).map(s=>tc(s.label))")
+    check('voltage / current / HX names', all(x in labels for x in ['Voltage V1-2','Voltage V2-3','Voltage V3-1','Current A-1','Engine Coolant To HX','Garage Radiator From HX','Fuel To HX','Generator Cooling Pump Suction Pressure','Generator Cooling Fan 1 Running']), labels)
+    check('To HX shows a hint', 'coming off the engine' in page.evaluate("TS.find(s=>s.field==='ehx_co').desc"))
+    page.evaluate("__run({'s0.ehx_co':'168','s0.c_cool':'High'}, {stopAt:'g_hub'})")
+    check('back at choice screen after set 1', page.evaluate("curStep().kind") == 'hub')
+    check('next reading due shown', 'Next reading due about' in page.text_content('#t-input'))
+    check('choice: next set or end test', page.text_content('#hub-add') == 'Take Next Reading Set (2)' and page.text_content('#hub-end') == 'End Test: Stop The Generator')
+    check('coolant level High counts as flagged', page.evaluate("setFlags(0)") == 2, page.evaluate("setFlags(0)"))
+    page.click('#hub-add')
     page.evaluate("__run({}, {stopAt:'s1.v_ab'})")
     page.click('text=Same as last set (voltage and current)')
-    check('same as last copied', page.evaluate("T.v['s1.a_c']") == page.evaluate("T.v['s0.a_c']") and page.evaluate("curStep().field") == 'ehx_ci')
+    check('same as last copied', page.evaluate("T.v['s1.a_c']") == page.evaluate("T.v['s0.a_c']") and page.evaluate("curStep().field") == 'ehx_co')
     page.evaluate("setT(curStep(),'170');refreshTStatus()")
     check('out of range flagged red', 'alert' in page.get_attribute('#t-vbox', 'class'))
+    page.evaluate("__run({}, {stopAt:'g_hub'})")
+    page.evaluate("window.__c=window.confirm;window.__asked='';window.confirm=m=>{window.__asked=m;return false;};document.getElementById('hub-end').click();window.confirm=window.__c")
+    check('end warning mentions 3 sets expected', '3 reading sets expected' in page.evaluate("window.__asked"))
+    check('ending with 2 sets asks first; No stays on readings', page.evaluate("curStep().kind") == 'hub')
     restore = page.evaluate("cancelRestoreList(T)")
     check('generator cancel restore list', restore == ['g_stop', 'g_ctl2', 'g_ats1r', 'g_atsal2', 'g_secd'], restore)
-    r = page.evaluate("__run({}, {sets:2})")
+    r = page.evaluate("__run({}, {sets:3})")
     check('generator reaches review', r == 's-treview', r)
+    check('once-during-test steps removed', not page.evaluate("TS.some(s=>s.id==='g_gcf'||s.id==='g_gcp')"))
     check('no ATS-2 retransfer when N/A', not page.evaluate("TS.some(s=>s.id==='g_ats2r')"))
     page.click('#tr-save'); page.wait_for_selector('#s-done.active'); wait_sent(page)
     rec = srv.submits('generator')[-1]['record']
-    check('two sets saved', len(rec['sets']) == 2)
-    check('set values saved', rec['sets'][0]['vals']['ehx_ci'] == '168' and rec['sets'][1]['vals']['ehx_ci'] == '170')
+    check('three sets saved', len(rec['sets']) == 3)
+    check('set values saved', rec['sets'][0]['vals']['ehx_co'] == '168' and rec['sets'][1]['vals']['ehx_co'] == '170' and rec['sets'][0]['vals']['c_cool'] == 'High')
+    check('new readings saved', all(k in rec['sets'][2]['vals'] for k in ['gcp_s','gcp_d','c_gcf','c_rcf']))
     check('test type saved', rec['testType'] == 'ATS Transfer')
     check('event times saved', bool(rec['values'].get('g_start')) and bool(rec['values'].get('g_stop')))
     check('no PDF sent for sheet forms', not srv.submits('generator')[-1].get('pdf'))
+    # Edit later: add a reading set with the time it was taken
+    page.evaluate("goRounds()")
+    page.evaluate("editRecord('%s')" % rec['id'])
+    page.evaluate("T.idx=TS.findIndex(s=>s.kind==='hub');renderTest()")
+    check('edit keeps the reading sets screen', page.evaluate("curStep().kind") == 'hub' and page.locator('#hub-add').count() == 1)
+    page.evaluate("window.__p=window.prompt;window.prompt=()=>'6:26 AM';document.getElementById('hub-add').click();window.prompt=window.__p")
+    check('edit: new set stamped with typed time', page.evaluate("T.sets[3].time") == '6:26 AM', page.evaluate("T.sets[3].time"))
+    r = page.evaluate("__run({}, {sets:4})")
+    page.click('#tr-save'); page.wait_for_selector('#s-done.active'); wait_sent(page)
+    rec2 = srv.submits('generator')[-1]['record']
+    check('edit saved 4 sets, same record', len(rec2['sets']) == 4 and rec2['id'] == rec['id'])
+
+def t_generator_legacy(page, srv):
+    print('Generator: v2.1 record opens with new layout')
+    page.evaluate("goRounds()")
+    old = {'id': 'gold1', 'form': 'generator', 'date': '2026-11-25', 't0': '2026-11-25T14:09:00Z', 'updated': '2026-11-25T14:45:00Z', 'status': 'complete', 'tester': 'scott', 'testerName': 'Scott Morris', 'testType': 'No-Load',
+           'values': {'g_cond2': '✓', 'g_start': '2026-11-25T14:09:00Z', 'g_stop': '2026-11-25T14:44:00Z', 'g_gcf': '✓'},
+           'sets': [{'t': '2026-11-25T14:10:00Z', 'time': '6:10 AM', 'vals': {'oil': '50', 'ehx_ci': '93', 'ehx_co': '136', 'c_cool': '✓', 'rlp_i': '1', 'c_rcfa': '✓'}}], 'notes': [], 'defs': []}
+    page.evaluate("r => { const a = lsGet(TK.local, []); a.push(r); lsSet(TK.local, a); }", old)
+    page.evaluate("editRecord('gold1')")
+    check('old condition check fills the three new ones', page.evaluate("['g_cond_rcf','g_cond_gcf','g_cond_gcp'].every(k=>T.v[k]==='✓')"))
+    check('old coolant ✓ becomes Normal', page.evaluate("T.v['s0.c_cool']") == 'Normal')
+    check('old To / From HX values stay in place', page.evaluate("T.v['s0.ehx_co']") == '136' and page.evaluate("T.v['s0.ehx_ci']") == '93')
+    page.evaluate("T=null;saveT()")
+    page.evaluate("r => { lsSet(TK.local, lsGet(TK.local, []).filter(x => x.id !== 'gold1')); }", old)
 
 def t_elevator(page, srv):
     print('Elevator: order, F needs note')
@@ -292,20 +348,41 @@ def t_elevator(page, srv):
     ids = page.evaluate("TS.map(s=>s.id)")
     check('Phase 1 item-by-item across cars', ids[:7] == ['p1.fcc.A', 'p1.fcc.B', 'p1.fcc.C', 'p1.fcc.D', 'p1.fcc.E', 'p1.fcc.P', 'p1.lobby.A'], ids[:7])
     p2a = [i for i in ids if i.startswith('p2.') and i.endswith('.A')]
-    check('Phase 2 car A order', [i.split('.')[1] for i in p2a] == ['lamp', 'bell_l', 'bell_r', 'close_l', 'close_r', 'photo', 'open_l', 'open_r', 'hold', 'phone', 'addr', 'carid', 'cancel'], p2a)
+    check('Phase 2 car A order', [i.split('.')[1] for i in p2a] == ['lamp', 'bell', 'close', 'photo', 'open', 'hold', 'phone', 'addr', 'carid'], p2a)
     check('Reset last, per car', ids[-6:] == ['p3.normal.' + c for c in 'ABCDEP'])
-    page.evaluate("__run({}, {stopAt:'p2.close_l.C'})")
+    check('titles capitalized', page.evaluate("TS.find(s=>s.id==='p2.phone.A').label") == 'Elevator Phone Operation')
+    page.evaluate("__run({}, {stopAt:'p2.close.C'})")
     page.click('.opt >> text=F · Fail')
     page.wait_for_selector('#ov-tnote.open')
     pre = page.input_value('#tnote-ta')
-    check('note prefilled with car and item', pre.startswith('Car C (F): Door close button / left side'), pre)
-    page.fill('#tnote-ta', pre + 'Button sticks.'); page.click('#ov-tnote .btn-acc')
+    check('note box opens blank', pre == '', pre)
+    page.fill('#tnote-ta', 'Button sticks.'); page.click('#ov-tnote .btn-acc')
     r = page.evaluate("__run({})")
     check('elevator reaches review', r == 's-treview', r)
     page.click('#tr-save'); page.wait_for_selector('#s-done.active'); wait_sent(page)
     rec = srv.submits('elevator')[-1]['record']
-    check('F stored', rec['values']['p2.close_l.C'] == 'F')
-    check('note stored', any('Button sticks' in n for n in rec['notes']))
+    check('F stored', rec['values']['p2.close.C'] == 'F')
+    check('note saved with car and item', 'Car C · Door Close Button Failure: Button sticks.' in rec['notes'], rec['notes'])
+
+def t_no_wait(page, srv):
+    print('Rounds: no waiting after Submit, discard reported')
+    page.evaluate("goRounds()")
+    srv.offline_rounds = True
+    page.click('#round-cards .round-card'); page.wait_for_selector('#s-log.active')
+    for k in '44': page.click('.key[data-k="%s"]' % k)
+    page.click('#nav-next'); page.click('.opt >> text=Running'); page.wait_for_selector('#s-review.active', timeout=5000)
+    page.click('#submit-btn'); page.wait_for_selector('#s-done.active'); page.wait_for_timeout(400)
+    check('done screen says saved on phone, safe to close', 'Safe to close the app' in page.text_content('#done-status'), page.text_content('#done-status'))
+    page.wait_for_selector('#s-rounds.active', timeout=5000)
+    check('returns to Rounds by itself', True)
+    check('Export shown while waiting', page.is_visible('#sync-exp'))
+    srv.offline_rounds = False
+    wait_sent(page)
+    check('Export hidden once sent', not page.is_visible('#sync-exp'))
+    page.click('#round-cards .round-card'); page.wait_for_selector('#s-log.active')
+    wait_sent(page)
+    page.evaluate("discardRound(true)"); wait_sent(page)
+    check('discard reported to server', any(c['action'] == 'roundDiscarded' for c in srv.calls))
 
 def t_edit_offline_resume(page, srv):
     print('Edit later, offline, resume')
@@ -367,7 +444,7 @@ with sync_playwright() as p:
     ctx.route(re.compile(r'https://script\.google\.com/.*'), srv.handle)
     ctx.route(re.compile(r'https://accounts\.google\.com/.*'), lambda r: r.fulfill(status=200, body='', content_type='text/javascript'))
     boot(page, srv)
-    for t in [t_home_and_rounds, t_diesel, t_chain, t_cancel, t_generator, t_elevator, t_edit_offline_resume, t_screens]:
+    for t in [t_home_and_rounds, t_diesel, t_chain, t_cancel, t_generator, t_generator_legacy, t_elevator, t_no_wait, t_edit_offline_resume, t_screens]:
         try:
             t(page, srv)
         except Exception as e:

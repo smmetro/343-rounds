@@ -84,15 +84,16 @@ const G = {
     base64EncodeWebSafe: b => Buffer.from(typeof b === 'string' ? Buffer.from(b) : b).toString('base64url'), base64DecodeWebSafe: s => Buffer.from(s, 'base64url')},
   UrlFetchApp: {fetch: (url) => { if (/export\?format=pdf/.test(url)) { pdfExports++; return {getResponseCode: () => 200, getBlob: () => new Blob(Buffer.from('%PDF-1.4 sim'), 'application/pdf', 'x.pdf')}; }
     return {getResponseCode: () => 200, getContentText: () => '{}'}; }},
-  ScriptApp: {getOAuthToken: () => 'token'},
+  ScriptApp: {getOAuthToken: () => 'token', getProjectTriggers: () => triggers, newTrigger: fn => ({timeBased: () => ({everyMinutes: m => ({create: () => triggers.push({getHandlerFunction: () => fn, every: m})})})})},
   PropertiesService: {getScriptProperties: () => ({getProperty: k => props[k] || null, setProperty: (k, v) => { props[k] = v; }})},
   LockService: {getScriptLock: () => ({waitLock() {}, releaseLock() {}})},
   ContentService: {createTextOutput: s => ({setMimeType() { return JSON.parse(s); }}), MimeType: {JSON: 'json'}},
-  MailApp: {getRemainingDailyQuota: () => 100}
+  MailApp: {getRemainingDailyQuota: () => 100, sendEmail: o => mails.push(o)}
 };
+const triggers = [], mails = [];
 vm.createContext(G);
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'server', 'Code.gs'), 'utf8') + '\n' + fs.readFileSync(path.join(ROOT, 'server', 'Tests.gs'), 'utf8') +
-  '\n;globalThis.__api={doPost,setupTests_,submitTest_,testSync_,testAssets_,cleanRecord_,makeSession_,testFormsSelfCheck,TESTS};', G, {filename: 'server'});
+  '\n;globalThis.__api={doPost,checkMissingRounds,roundStarted_,roundDiscarded_,forgetStart_,starts_,setupTests_,submitTest_,testSync_,testAssets_,cleanRecord_,makeSession_,testFormsSelfCheck,TESTS};', G, {filename: 'server'});
 const S = G.__api;
 // Users tab for sessions
 const users = MAIN.insertSheet('Users');
@@ -138,9 +139,9 @@ console.log('Generator and Elevator Sheets');
 const now = '2026-10-27T14:02:00Z';
 const gen = {id: 'g1', form: 'generator', date: '2026-10-27', t0: now, updated: now, status: 'complete', tester: 'scott', testerName: 'Scott Morris', testType: 'ATS Transfer',
   values: {g_type: 'ATS Transfer', g_sec: '✓', g_sie: '✓', g_atsal: '✓', g_cond1: '✓', g_cond2: '✓', g_ctl: 'Auto', g_bat: '27.6', g_cool: '✓', g_oillvl: '✓', g_blk: '112', g_day: '7/8', g_hrs1: '1284.2',
-    g_start: now, g_ats1: 'Transferred to Emergency', g_ats2: 'N/A', g_gcf: '✓', g_gcp: '✓', g_stop: '2026-10-27T14:34:00Z', g_hrs2: '1284.7', g_ctl2: '✓', g_ats1r: '✓', g_atsal2: '✓', g_secd: '✓'},
+    g_start: now, g_ats1: 'Transferred to Emergency', g_ats2: 'N/A', g_stop: '2026-10-27T14:34:00Z', g_hrs2: '1284.7', g_ctl2: '✓', g_ats1r: '✓', g_atsal2: '✓', g_secd: '✓'},
   sets: [0, 1, 2].map(k => ({time: ['7:05 AM', '7:20 AM', '7:32 AM'][k], vals: {oil: '46', ect: '170', hz: '60.0', v_ab: '480', v_ac: '479', v_bc: '481', a_a: '0', a_b: '0', a_c: '0',
-    ehx_ci: k === 2 ? '168' : '150', ehx_co: '140', ehx_ri: '88', ehx_ro: '101', fhx_i: '94', fhx_o: '85', fuel_sup: '78', rlp_i: '12', rlp_o: '4', c_cool: '✓', c_rcf: '✓', c_rcfa: '✓'}})),
+    ehx_co: k === 2 ? '168' : '155', ehx_ci: '110', ehx_ri: '82', ehx_ro: '88', c_cool: ['✓', 'Normal', 'High'][k], c_rcf: '✓', fhx_i: '94', fhx_o: '80', fuel_sup: '66', gcp_s: '2', gcp_d: '10.5', c_gcf: '✓'}})),
   notes: ['Set 3: engine coolant in 168°F, above 165°F normal. Monitoring next test.']};
 r = post({action: 'submitTest', record: gen});
 check('generator saved', r.ok, JSON.stringify(r));
@@ -153,7 +154,15 @@ const gsh = gss.getSheets()[0];
 const allVals = Object.values(gsh.cells).map(c => String(c.v));
 check('flag on out-of-range reading', allVals.includes('168°F ▲'));
 check('units appended', allVals.includes('46 psi') && allVals.includes('480 V') && allVals.includes('60.0 Hz'));
-check('ATS retransfer rows', allVals.includes('ATS-1 retransferred to normal') && allVals.includes('N/A'));
+check('ATS retransfer rows', allVals.includes('ATS-1 Retransferred To Normal') && allVals.includes('N/A'));
+check('voltage V1-2 / V2-3 / V3-1, current A-1 / A-2 / A-3', ['V1-2', 'V2-3', 'V3-1', 'A-1', 'A-2', 'A-3'].every(x => allVals.some(v => v.trim() === x)));
+check('voltage normal 470–490 V', allVals.includes('470–490 V'));
+check('heat exchanger To HX / From HX names', ['Engine Coolant To HX', 'Engine Coolant From HX', 'Garage Radiator To HX', 'Garage Radiator From HX', 'Fuel To HX', 'Fuel From HX'].every(x => allVals.some(v => v.trim() === x)));
+check('Generator Cooling Pump section with 1–3 / 9–11 psi', allVals.includes('Generator Cooling Pump') && allVals.includes('1–3 psi') && allVals.includes('9–11 psi') && allVals.includes('10.5 psi'));
+check('coolant level: old ✓ shows Normal, High flagged', allVals.includes('Normal') && allVals.includes('High ▲'));
+check('old combined condition check fills three pre-run rows', ['Radiator Cooling Fan 1 Condition', 'Generator Cooling Fan 1 Condition', 'Generator Cooling Pump 1 Condition'].every(x => allVals.includes(x)));
+check('removed: radiator loop pressure, area condition, once-during-test', !allVals.some(v => /Radiator Loop|general condition$|once during test/i.test(v)));
+check('labels title case', allVals.includes('Security Notified Of Generator Test') && allVals.includes('Hours (Start)'));
 check('run time calculated', allVals.includes('32 min'));
 check('signature stamped', gsh.images.length === 1);
 check('no Load Bank values on ATS test', !allVals.some(v => / kW$/.test(v)));
@@ -180,9 +189,12 @@ check('elevator saved', r.ok, JSON.stringify(r));
 const ess = Object.values(SHEETS).find(s => s.name === '2026-10-26 Elevator Phase I and II Test');
 check('elevator Sheet in Elevator/2026', ess && ess.file.parent.parent.name === 'Elevator');
 const esh = ess.getSheets()[0], ev = Object.values(esh.cells).map(c => String(c.v));
-check('revision footer', ev.includes('Revision 10/26/2026'));
+check('revision footer', ev.includes('Revision 11/25/2026'));
 check('legend ✓/F', ev.includes('✓ = Pass   F = Fail'));
-check('new Phase 2 items', ev.includes('Operator identifies building address') && ev.includes('Confirm elevator phone operation'));
+check('Phase 2 items title case, renamed', ev.includes('Operator Identifies Building Address') && ev.includes('Elevator Phone Operation') && !ev.includes('Confirm elevator phone operation'));
+check('call cancel removed', !ev.some(x => /call cancel/i.test(x)));
+check('left / right combined', ev.includes('Door Close Button') && !ev.some(x => !x.startsWith('Car ') && /left side|right side/.test(x)));
+check('old v2.1 record: left F shows on combined item', (() => { const row = Object.keys(esh.cells).map(k => k.split(',')).find(([rr, cc]) => esh.cells[rr + ',' + cc].v === 'Door Close Button'); return row && esh.cells[row[0] + ',4'] && esh.cells[row[0] + ',4'].v === 'F'; })());
 check('incomplete marked in title', (() => { post({action: 'submitTest', record: Object.assign({}, elev, {id: 'e2', status: 'incomplete', t0: '2026-10-27T20:00:00Z', updated: now})});
   const s = Object.values(SHEETS).find(x => x.name === '2026-10-26 Elevator Phase I and II Test (2)'); return s && Object.values(s.getSheets()[0].cells).some(c => /INCOMPLETE/.test(String(c.v))); })());
 check('sync returns saved records', post({action: 'testSync'}).records.length === 6, post({action: 'testSync'}).records.length);
@@ -213,6 +225,26 @@ function renderSheet(sh, file) {
     h += '</tr>';
   }
   fs.writeFileSync(path.join(OUT, file), h + '</table></div></body></html>');
+}
+console.log('Missing round email');
+{
+  const A = G.__api, jacky = {email: 'jacky@343sansomesf.com', name: 'Jacky'};
+  const old = new Date(Date.now() - 95 * 60000).toISOString(), fresh = new Date(Date.now() - 20 * 60000).toISOString();
+  A.roundStarted_(jacky, {rid: 'r1111111a', templateName: 'Morning Rounds', t0: old});
+  A.roundStarted_(jacky, {rid: 'r2222222b', templateName: 'Closing Rounds', t0: fresh});
+  A.roundStarted_(jacky, {rid: 'r3333333c', templateName: 'Weekly Rounds', t0: old});
+  A.roundStarted_(jacky, {rid: 'r4444444d', templateName: 'Morning Rounds', t0: old});
+  A.forgetStart_('r3333333c', true);      // round arrived
+  A.roundDiscarded_('r4444444d');         // engineer discarded it
+  A.checkMissingRounds();
+  check('one email for the round started 95 min ago', mails.length === 1 && mails[0].to === 'jacky@343sansomesf.com', JSON.stringify(mails.map(m => m.subject)));
+  check('email wording', mails[0] && /Morning Rounds started .* hasn't reached the Sheet/.test(mails[0].body) && /safe on your phone. Open the Rounds app with signal to send it/.test(mails[0].body), mails[0] && mails[0].body);
+  A.checkMissingRounds();
+  check('emailed only once', mails.length === 1);
+  check('round still in progress (20 min) not emailed', !!A.starts_()['r2222222b'] && !A.starts_()['r2222222b'].emailed);
+  check('start after arrival ignored', A.roundStarted_(jacky, {rid: 'r3333333c', t0: old}).already === true);
+  check('bad round ID rejected', (() => { try { A.roundStarted_(jacky, {rid: 'x'}); return false; } catch (e) { return true; } })());
+  check('roundStarted via doPost', post({action: 'roundStarted', rid: 'r5555555e', templateName: 'Morning Rounds', t0: fresh}).ok === true);
 }
 renderSheet(gsh, 'sheet_generator.html'); renderSheet(esh, 'sheet_elevator.html'); renderSheet(lb, 'sheet_generator_loadbank.html');
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
