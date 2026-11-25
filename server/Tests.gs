@@ -24,7 +24,7 @@ const TESTS = {
     diesel: 'Diesel Fire Pump Weekly Test', electric: 'Electric Fire Pump Monthly Test'
   },
   FOLDERS: {elevator: ['Elevator'], generator: ['Generator'], diesel: ['Fire Pump', 'Diesel Weekly'], electric: ['Fire Pump', 'Electric Monthly']},
-  ELEV_REVISION: 'Revision 10/26/2026'
+  ELEV_REVISION: 'Revision 11/25/2026'
 };
 
 // ---------- setup (called from setup() in Code.gs) ----------
@@ -198,6 +198,7 @@ function put_(sh, row, col, val, opt) {
   const r = sh.getRange(row, col, 1, (opt && opt.span) || 1);
   if (opt && opt.span > 1) r.merge();
   r.setValue(val === undefined || val === null ? '' : val);
+  r.setVerticalAlignment('middle');
   if (opt) {
     if (opt.bold) r.setFontWeight('bold');
     if (opt.italic) r.setFontStyle('italic');
@@ -211,25 +212,29 @@ function put_(sh, row, col, val, opt) {
 }
 
 // ---------- Generator ----------
-const GEN_ROWS = [ // [id, label, unit, lo, hi, group]
-  ['kw', 'Load (Load Bank only)', 'kW'], ['oil', 'Oil pressure', 'psi', 40, 50], ['ect', 'Engine coolant temp', '°F', 160, 180], ['hz', 'Frequency', 'Hz'],
-  ['#', 'Voltage'], ['v_ab', 'A-B', 'V'], ['v_ac', 'A-C', 'V'], ['v_bc', 'B-C', 'V'],
-  ['#', 'Current'], ['a_a', 'Phase A', 'A'], ['a_b', 'Phase B', 'A'], ['a_c', 'Phase C', 'A'],
-  ['#', 'Engine Heat Exchanger'], ['ehx_ci', 'Engine coolant in', '°F', 100, 165], ['ehx_co', 'Engine coolant out', '°F', 100, 165],
-  ['ehx_ri', 'Radiator loop in', '°F', 75, 105], ['ehx_ro', 'Radiator loop out', '°F', 75, 105],
-  ['#', 'Fuel Heat Exchanger'], ['fhx_i', 'Fuel heat exchanger inlet', '°F', 70, 110], ['fhx_o', 'Fuel heat exchanger outlet', '°F', 70, 90], ['fuel_sup', 'Engine fuel supply temp', '°F', 65, 85],
-  ['#', 'Radiator Loop Pressure'], ['rlp_i', 'Inlet pressure', 'psi', 10, 14], ['rlp_o', 'Outlet pressure', 'psi', 2, 6],
-  ['#', 'Checked every reading set'], ['c_cool', 'Engine coolant level'], ['c_rcf', 'Radiator Cooling Fan 1 running'], ['c_rcfa', 'Radiator Cooling Fan 1 area: general condition']
+const GEN_ROWS = [ // [id, label, unit, lo, hi, bad choices]; '#' = section. IDs kept from v2.1 (ehx_co = hot side, ehx_ci = cooled side)
+  ['kw', 'Load (Load Bank Only)', 'kW'], ['oil', 'Oil Pressure', 'psi', 40, 50], ['ect', 'Engine Coolant Temp', '°F', 160, 180], ['hz', 'Frequency', 'Hz'],
+  ['#', 'Voltage'], ['v_ab', 'V1-2', 'V', 470, 490], ['v_bc', 'V2-3', 'V', 470, 490], ['v_ac', 'V3-1', 'V', 470, 490],
+  ['#', 'Current'], ['a_a', 'A-1', 'A'], ['a_b', 'A-2', 'A'], ['a_c', 'A-3', 'A'],
+  ['#', 'Engine Heat Exchanger'], ['ehx_co', 'Engine Coolant To HX', '°F', 100, 165], ['ehx_ci', 'Engine Coolant From HX', '°F', 100, 165],
+  ['ehx_ri', 'Garage Radiator To HX', '°F', 75, 105], ['ehx_ro', 'Garage Radiator From HX', '°F', 75, 105],
+  ['c_cool', 'Engine Coolant Level', '', undefined, undefined, ['High', 'Low']], ['c_rcf', 'Radiator Cooling Fan 1 Running'],
+  ['#', 'Fuel Heat Exchanger'], ['fhx_i', 'Fuel To HX', '°F', 70, 110], ['fhx_o', 'Fuel From HX', '°F', 70, 90], ['fuel_sup', 'Engine Fuel Supply Temp', '°F', 65, 85],
+  ['#', 'Generator Cooling Pump'], ['gcp_s', 'Suction Pressure', 'psi', 1, 3], ['gcp_d', 'Discharge Pressure', 'psi', 9, 11],
+  ['#', 'Checked Every Reading Set'], ['c_gcf', 'Generator Cooling Fan 1 Running']
 ];
 function withUnit_(v, unit) { if (v === undefined || v === '') return ''; return unit === '°F' ? v + '°F' : v + (unit ? ' ' + unit : ''); }
 function outOfRange_(v, lo, hi) { const n = Number(v); return lo !== undefined && v !== '' && v !== undefined && !isNaN(n) && (n < lo || n > hi); }
 
 function layoutGenerator_(sh, rec) {
-  const V = rec.values || {}, sets = rec.sets || [], ats = rec.testType === 'ATS Transfer', lb = rec.testType === 'Load Bank';
+  const V = rec.values || {}, ats = rec.testType === 'ATS Transfer', lb = rec.testType === 'Load Bank';
+  // v2.1 records: one combined condition check; coolant level was ✓ / F
+  const cond = k => V[k] !== undefined ? V[k] : V.g_cond2;
+  const sets = (rec.sets || []).map(st => { const vals = Object.assign({}, st.vals || {}); if (vals.c_cool === '✓') vals.c_cool = 'Normal'; else if (vals.c_cool === 'F') vals.c_cool = 'Low'; return Object.assign({}, st, {vals}); });
   const widths = [236, 130, 59, 59, 59, 59, 59, 59];
   widths.forEach((w, i) => sh.setColumnWidth(i + 1, w));
   sh.getRange(1, 1, 80, 8).setFontFamily('Arial').setFontSize(9).setVerticalAlignment('middle').setNumberFormat('@');
-  sh.setRowHeightsForced(1, 80, 15);   // compact rows so the whole log prints on one letter page
+  sh.setRowHeightsForced(1, 80, 16);   // compact rows so the whole log prints on one letter page
   let r = 1;
   put_(sh, r, 1, '343 SANSOME STREET', {span: 8, bold: true, size: 15, align: 'center'}); sh.setRowHeightsForced(r, 1, 26); r++;
   put_(sh, r, 1, 'Emergency Generator Monthly Test Log' + (rec.status === 'incomplete' ? '  (INCOMPLETE)' : ''), {span: 8, size: 11, align: 'center', color: rec.status === 'incomplete' ? FLAG : null}); sh.setRowHeightsForced(r, 1, 20); r++;
@@ -242,19 +247,19 @@ function layoutGenerator_(sh, rec) {
   // side-by-side: pre-run (A:B) | pre-start (C:H)
   const top = r;
   const left = [['PRE-RUN PROCEDURE']].concat([
-    ['Security notified of generator test', V.g_sec], ['Siemens monitoring: supervisories on ignore', V.g_sie], ['Basement ATS: no active alarms', V.g_atsal],
-    ['General condition: generator / day tank', V.g_cond1], ['General condition: Radiator Cooling Fan 1,\nGenerator Cooling Fan 1,\nGenerator Cooling Pump 1', V.g_cond2]]);
+    ['Security Notified Of Generator Test', V.g_sec], ['Siemens Monitoring: Supervisories On Ignore', V.g_sie], ['Basement ATS: No Active Alarms', V.g_atsal],
+    ['General Condition: Generator / Day Tank', V.g_cond1], ['Radiator Cooling Fan 1 Condition', cond('g_cond_rcf')],
+    ['Generator Cooling Fan 1 Condition', cond('g_cond_gcf')], ['Generator Cooling Pump 1 Condition', cond('g_cond_gcp')]]);
   if (ats) left.push(['ATS TRANSFER'], ['ATS-1', V.g_ats1], ['ATS-2', V.g_ats2]);
-  const right = [['PRE-START READINGS'], ['Control switch status', V.g_ctl], ['Battery (VDC)', V.g_bat], ['Engine coolant level', V.g_cool], ['Oil level', V.g_oillvl],
-    ['Block heater temp (°F)', V.g_blk], ['Day tank fuel level (pre)', V.g_day], ['Hours (start)', V.g_hrs1]];
+  const right = [['PRE-START READINGS'], ['Control Switch Status', V.g_ctl], ['Battery (VDC)', V.g_bat], ['Engine Coolant Level', V.g_cool], ['Oil Level', V.g_oillvl],
+    ['Block Heater Temp (°F)', V.g_blk], ['Day Tank Fuel Level (Pre)', V.g_day], ['Hours (Start)', V.g_hrs1]];
   const n = Math.max(left.length, right.length);
   for (let i = 0; i < n; i++) {
     const row = top + i, L = left[i], R = right[i];
     if (L) {
       if (L.length === 1) put_(sh, row, 1, L[0], {span: 2, bold: true, bg: SEC_BG, box: true});
       else {
-        const multi = L[0].indexOf('\n') !== -1;
-        put_(sh, row, 1, L[0], {box: true, size: multi ? 8 : 9}).setWrap(multi);
+        put_(sh, row, 1, L[0], {box: true});
         put_(sh, row, 2, L[1] || '', {align: 'center', box: true, size: String(L[1] || '').length > 14 ? 8 : 9});
       }
     }
@@ -262,14 +267,14 @@ function layoutGenerator_(sh, rec) {
       if (R.length === 1) put_(sh, row, 3, R[0], {span: 6, bold: true, bg: SEC_BG, box: true});
       else { put_(sh, row, 3, R[0], {span: 4, box: true}); put_(sh, row, 7, R[1] || '', {span: 2, align: 'center', box: true}); }
     }
-    sh.setRowHeightsForced(row, 1, L && L[0].indexOf('\n') !== -1 ? 36 : 15);
+    sh.setRowHeightsForced(row, 1, 16);
   }
   r = top + n; sh.setRowHeightsForced(r, 1, 6); r++;
 
   // running readings grid
   put_(sh, r, 1, 'RUNNING READINGS', {span: 2, bold: true, bg: SEC_BG, box: true});
   put_(sh, r, 3, 'Engine start: ' + tm_(V.g_start), {span: 6, bold: true, bg: SEC_BG, align: 'center', box: true}); r++;
-  put_(sh, r, 1, 'Reading Set', {bold: true, bg: HEAD_BG, box: true}); put_(sh, r, 2, 'Normal', {bg: HEAD_BG, align: 'center', color: '#555555', box: true});
+  put_(sh, r, 1, 'Reading Set', {bold: true, bg: HEAD_BG, box: true}); put_(sh, r, 2, 'Normal', {bold: true, bg: HEAD_BG, align: 'center', color: '#555555', box: true});
   for (let k = 0; k < 6; k++) put_(sh, r, 3 + k, String(k + 1), {bold: true, bg: HEAD_BG, align: 'center', box: true});
   r++;
   put_(sh, r, 1, 'Time', {bold: true, box: true}); put_(sh, r, 2, '', {box: true});
@@ -278,46 +283,41 @@ function layoutGenerator_(sh, rec) {
   GEN_ROWS.forEach(g => {
     if (g[0] === '#') { put_(sh, r, 1, g[1], {span: 8, bold: true, italic: true, bg: SUB_BG, box: true}); r++; return; }
     put_(sh, r, 1, (['kw', 'oil', 'ect', 'hz'].indexOf(g[0]) === -1 ? '   ' : '') + g[1], {box: true});
-    put_(sh, r, 2, g[3] !== undefined ? g[3] + '–' + g[4] + (g[2] === '°F' ? '°F' : ' ' + g[2]) : '', {align: 'center', color: '#555555', size: 8, box: true});
+    put_(sh, r, 2, g[3] !== undefined ? g[3] + '–' + g[4] + (g[2] === '°F' ? '°F' : ' ' + g[2]) : g[5] ? 'Normal' : '', {align: 'center', color: '#555555', size: 8, box: true});
     for (let k = 0; k < 6; k++) {
       const v = sets[k] && sets[k].vals ? sets[k].vals[g[0]] : '';
       const cell = put_(sh, r, 3 + k, g[0] === 'kw' && !lb ? '' : withUnit_(v, g[2]), {align: 'center', box: true});
       if (g[0] === 'kw' && !lb) cell.setBackground('#f3f3f3');
-      if (outOfRange_(v, g[3], g[4]) || v === 'F') { cell.setFontColor(FLAG).setFontWeight('bold').setValue(withUnit_(v, g[2]) + ' ▲'); }
+      if (outOfRange_(v, g[3], g[4]) || v === 'F' || (g[5] && g[5].indexOf(v) >= 0)) { cell.setFontColor(FLAG).setFontWeight('bold').setValue(withUnit_(v, g[2]) + ' ▲'); }
     }
     r++;
-  });
-  put_(sh, r, 1, 'Confirmed running (once during test)', {span: 8, bold: true, italic: true, bg: SUB_BG, box: true}); r++;
-  [['Generator Cooling Fan 1', V.g_gcf], ['Generator Cooling Pump 1', V.g_gcp]].forEach(x => {
-    put_(sh, r, 1, '   ' + x[0], {box: true}); put_(sh, r, 2, '', {box: true}); put_(sh, r, 3, x[1] || '', {align: 'center', box: true});
-    put_(sh, r, 4, '', {span: 5, bg: '#f3f3f3', box: true}); r++;
   });
   sh.setRowHeightsForced(r, 1, 6); r++;
 
   // shutdown (A:B) | notes + tester (C:H)
   const runMin = V.g_start && V.g_stop ? Math.round((new Date(V.g_stop) - new Date(V.g_start)) / 60000) + ' min' : '';
-  const sd = [['SHUTDOWN'], ['Stop time', tm_(V.g_stop)], ['Hours (stop)', V.g_hrs2], ['Run time (calculated)', runMin], ['Control switch returned to Auto', V.g_ctl2]];
-  if (ats) ['1', '2'].forEach(x => sd.push(['ATS-' + x + ' retransferred to normal', V['g_ats' + x] === 'N/A' ? 'N/A' : V['g_ats' + x + 'r']]));
-  sd.push(['Basement ATS: no active alarms', V.g_atsal2], ['Security notified test complete', V.g_secd]);
+  const sd = [['SHUTDOWN'], ['Stop Time', tm_(V.g_stop)], ['Hours (Stop)', V.g_hrs2], ['Run Time (Calculated)', runMin], ['Control Switch Returned To Auto', V.g_ctl2]];
+  if (ats) ['1', '2'].forEach(x => sd.push(['ATS-' + x + ' Retransferred To Normal', V['g_ats' + x] === 'N/A' ? 'N/A' : V['g_ats' + x + 'r']]));
+  sd.push(['Basement ATS: No Active Alarms', V.g_atsal2], ['Security Notified Test Complete', V.g_secd]);
   const s0 = r;
   sd.forEach((x, i) => {
     if (x.length === 1) put_(sh, s0 + i, 1, x[0], {span: 2, bold: true, bg: SEC_BG, box: true});
     else { put_(sh, s0 + i, 1, x[0], {box: true}); put_(sh, s0 + i, 2, x[1] || '', {align: 'center', box: true}); }
-    sh.setRowHeightsForced(s0 + i, 1, 15);
+    sh.setRowHeightsForced(s0 + i, 1, 16);
   });
   const notesRows = sd.length - 4;
   put_(sh, s0, 3, 'NOTES', {span: 6, bold: true, bg: SEC_BG, box: true});
   const nr = sh.getRange(s0 + 1, 3, notesRows, 6).merge();
   box_(nr); nr.setValue((rec.notes || []).join('\n')).setWrap(true).setVerticalAlignment('top').setFontSize((rec.notes || []).join(' ').length > 400 ? 7 : 9);
   put_(sh, s0 + 1 + notesRows, 3, 'TESTER', {span: 6, bold: true, bg: SEC_BG, box: true});
-  put_(sh, s0 + 2 + notesRows, 3, 'Print name:  ' + (rec.testerName || ''), {span: 6, box: true});
+  put_(sh, s0 + 2 + notesRows, 3, 'Print Name:  ' + (rec.testerName || ''), {span: 6, box: true});
   put_(sh, s0 + 3 + notesRows, 3, 'Signature:', {span: 4, box: true});
   put_(sh, s0 + 3 + notesRows, 7, 'Date: ' + mdy_(rec.date), {span: 2, box: true});
   sh.setRowHeightsForced(s0 + 3 + notesRows, 1, 32);
   const sig = sigBlob_(rec.tester);
   if (sig) { const im = sh.insertImage(sig, 3, s0 + 3 + notesRows, 70, 2); const h = 30, w = Math.round(im.getWidth() * h / im.getHeight()); im.setHeight(h).setWidth(w); }
   r = s0 + Math.max(sd.length, 4 + notesRows) + 1;
-  put_(sh, r, 1, '▲ = outside normal range', {size: 8, color: '#555555'});
+  put_(sh, r, 1, '▲ = Outside Normal Range', {size: 8, color: '#555555'});
   put_(sh, r, 5, 'Generated by 343 Rounds App', {span: 4, size: 8, color: '#555555', align: 'right'});
   trimSheet_(sh, r, 8);
 }
@@ -325,15 +325,24 @@ function layoutGenerator_(sh, rec) {
 // ---------- Elevator ----------
 const ELEV = {
   cars: ['A', 'B', 'C', 'D', 'E', 'P'],
-  p1: [['fcc', 'Fire Recall Function FCC Room'], ['lobby', 'Fire Recall Function Lobby'], ['parked', 'Verify cars are parked and locked out on fire mode']],
-  p2: [['lamp', 'Emergency recall lamp activated'], ['bell_l', 'Emergency Bell function / left side'], ['bell_r', 'Emergency Bell function / right side'],
-    ['close_l', 'Door close button / left side'], ['close_r', 'Door close button / right side'], ['photo', 'Photo over-ride disabled'], ['open_l', 'Door open button / left side'],
-    ['open_r', 'Door open button / right side'], ['hold', 'Car Hold function'], ['phone', 'Confirm elevator phone operation'], ['addr', 'Operator identifies building address'],
-    ['carid', 'Operator identifies car ID'], ['cancel', 'Call cancel function']],
-  p3: [['normal', 'Ensure car returns to normal operation']]
+  p1: [['fcc', 'Fire Recall Function FCC Room'], ['lobby', 'Fire Recall Function Lobby'], ['parked', 'Verify Cars Are Parked And Locked Out On Fire Mode']],
+  p2: [['lamp', 'Emergency Recall Lamp Activated'], ['bell', 'Emergency Bell Function'], ['close', 'Door Close Button'], ['photo', 'Photo Over-Ride Disabled'],
+    ['open', 'Door Open Button'], ['hold', 'Car Hold Function'], ['phone', 'Elevator Phone Operation'], ['addr', 'Operator Identifies Building Address'],
+    ['carid', 'Operator Identifies Car ID']],
+  p3: [['normal', 'Ensure Car Returns To Normal Operation']],
+  // v2.1 records: left / right items read as one (any F = F)
+  legacy: {bell: ['bell_l', 'bell_r'], close: ['close_l', 'close_r'], open: ['open_l', 'open_r']}
 };
+function elevValues_(rec) {
+  const V = Object.assign({}, rec.values || {});
+  Object.keys(ELEV.legacy).forEach(k => ELEV.cars.forEach(c => {
+    const ov = ELEV.legacy[k].map(o => V['p2.' + o + '.' + c]).filter(x => x);
+    if (ov.length && V['p2.' + k + '.' + c] === undefined) V['p2.' + k + '.' + c] = ov.indexOf('F') >= 0 ? 'F' : '✓';
+  }));
+  return V;
+}
 function layoutElevator_(sh, rec) {
-  const V = rec.values || {};
+  const V = elevValues_(rec);
   [330, 62, 62, 62, 62, 62, 62].forEach((w, i) => sh.setColumnWidth(i + 1, w));
   sh.getRange(1, 1, 60, 7).setFontFamily('Arial').setFontSize(10).setVerticalAlignment('middle').setNumberFormat('@');
   let r = 1;
@@ -393,14 +402,14 @@ function testFormsSelfCheck() {
   const now = new Date().toISOString();
   const date = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd');
   const gen = {id: 'selfcheck-gen', form: 'generator', date: date, t0: now, status: 'complete', tester: 'scott', testerName: 'Scott Morris', testType: 'ATS Transfer',
-    values: {g_sec: '✓', g_sie: '✓', g_atsal: '✓', g_cond1: '✓', g_cond2: '✓', g_ctl: 'Auto', g_bat: '27.6', g_cool: '✓', g_oillvl: '✓', g_blk: '112', g_day: 'Full', g_hrs1: '1284.2',
-      g_start: now, g_ats1: 'Transferred to Emergency', g_ats2: 'N/A', g_gcf: '✓', g_gcp: '✓', g_stop: new Date(Date.now() + 32 * 60000).toISOString(), g_hrs2: '1284.7', g_ctl2: '✓', g_ats1r: '✓', g_atsal2: '✓', g_secd: '✓'},
+    values: {g_sec: '✓', g_sie: '✓', g_atsal: '✓', g_cond1: '✓', g_cond_rcf: '✓', g_cond_gcf: '✓', g_cond_gcp: '✓', g_ctl: 'Auto', g_bat: '27.6', g_cool: '✓', g_oillvl: '✓', g_blk: '112', g_day: 'Full', g_hrs1: '1284.2',
+      g_start: now, g_ats1: 'Transferred to Emergency', g_ats2: 'N/A', g_stop: new Date(Date.now() + 32 * 60000).toISOString(), g_hrs2: '1284.7', g_ctl2: '✓', g_ats1r: '✓', g_atsal2: '✓', g_secd: '✓'},
     sets: [0, 1, 2].map(k => ({time: ['7:05 AM', '7:20 AM', '7:32 AM'][k], vals: {oil: '46', ect: '170', hz: '60.0', v_ab: '480', v_ac: '479', v_bc: '481', a_a: '0', a_b: '0', a_c: '0',
-      ehx_ci: k === 2 ? '168' : '150', ehx_co: '140', ehx_ri: '88', ehx_ro: '101', fhx_i: '94', fhx_o: '85', fuel_sup: '78', rlp_i: '12', rlp_o: '4', c_cool: '✓', c_rcf: '✓', c_rcfa: '✓'}})),
+      ehx_co: k === 2 ? '168' : '155', ehx_ci: '110', ehx_ri: '82', ehx_ro: '88', c_cool: 'Normal', c_rcf: '✓', fhx_i: '94', fhx_o: '80', fuel_sup: '66', gcp_s: '2', gcp_d: '10.5', c_gcf: '✓'}})),
     notes: ['Set 3: engine coolant in 168°F, above 165°F normal. Sample record from testFormsSelfCheck.']};
-  const elev = {id: 'selfcheck-elev', form: 'elevator', date: date, t0: now, status: 'complete', tester: 'jacky', testerName: 'Jacky Cheung', values: {}, notes: ['Car C (F): Door close button / left side. Sample record from testFormsSelfCheck.']};
+  const elev = {id: 'selfcheck-elev', form: 'elevator', date: date, t0: now, status: 'complete', tester: 'jacky', testerName: 'Jacky Cheung', values: {}, notes: ['Car C · Door Close Button Failure: Sample record from testFormsSelfCheck.']};
   ['p1', 'p2', 'p3'].forEach(p => ELEV[p].forEach(it => ELEV.cars.forEach(c => { elev.values[p + '.' + it[0] + '.' + c] = '✓'; })));
-  elev.values['p2.close_l.C'] = 'F';
+  elev.values['p2.close.C'] = 'F';
   const root = folder_(DriveApp.getFolderById(TESTS.ROOT_ID), '_Self-check');
   const old = root.getFiles(); while (old.hasNext()) old.next().setTrashed(true);   // replace earlier samples
   if (!sigBlob_('scott') || !sigBlob_('jacky')) Logger.log('WARNING: sig_scott.png / sig_jacky.png not found in Rounds > ' + TESTS.ASSETS_FOLDER + '. Samples will have no signature.');

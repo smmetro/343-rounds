@@ -19,7 +19,7 @@
 // a name, and renaming a reading keeps its history in place.
 // ============================================================
 
-const VERSION = '2.1.1';
+const VERSION = '2.2.0';
 
 const CONFIG = {
   CLIENT_ID: '1029316106419-u8cc3mq65a5fos9gp3074d0bbfkvsgsr.apps.googleusercontent.com',
@@ -98,6 +98,10 @@ function setup() {
   UrlFetchApp.fetch('https://api.weather.gov/stations/' + CONFIG.NWS_PRIMARY, {muteHttpExceptions: true, headers: nwsHeaders_()});
   MailApp.getRemainingDailyQuota();
   setupTests_();   // Tests.gs: Test Records tab + Test Form Assets folder
+  // Missing-round check every 15 minutes (installed once)
+  if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'checkMissingRounds')) {
+    ScriptApp.newTrigger('checkMissingRounds').timeBased().everyMinutes(15).create();
+  }
   Logger.log('Setup complete (server v' + VERSION + ').');
 }
 
@@ -129,6 +133,8 @@ function doPost(e) {
       case 'whoami':      return json_({ok: true, user: user});
       case 'bootstrap':   return json_(bootstrap_(user));
       case 'submitRound': return json_(withLock_(() => submitRound_(user, req.round)));
+      case 'roundStarted':  return json_(withLock_(() => roundStarted_(user, req)));
+      case 'roundDiscarded': return json_(withLock_(() => roundDiscarded_(req.rid)));
       case 'uploadPhoto': return json_(withLock_(() => uploadPhoto_(user, req)));
       case 'testWrite':   return json_(testWrite_(user, req));
       case 'testPhoto':   return json_(testPhoto_(user, req));
@@ -580,7 +586,7 @@ function submitRound_(user, round) {
   const meta = readColMeta_(sh);
 
   // Already written? (outbox retry after a dropped connection)
-  if (findRoundRow_(sh, meta, round.rid)) return {ok: true, duplicate: true, rid: round.rid};
+  if (findRoundRow_(sh, meta, round.rid)) { forgetStart_(round.rid, true); return {ok: true, duplicate: true, rid: round.rid}; }
 
   // Weather, matched to when the round started, not when it synced
   const wxLogs = tmpl.logs.filter(l => l.autoFill && /^wx_/.test(l.id));
@@ -626,6 +632,7 @@ function submitRound_(user, round) {
   appendRows_(ss.getSheetByName(TAB.ALERTS), alertRows);
   const emailed = sendAlertEmail_(cfg, tmpl, user, built, photos, dateStr, timeStr);
 
+  forgetStart_(round.rid, true);
   return {ok: true, rid: round.rid, row: row, alerts: built.alerts.length, emailed: emailed};
 }
 
@@ -1017,4 +1024,52 @@ function appendRows_(sh, rows) {
 }
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+// ============================================================
+// MISSING ROUNDS (v2.2)
+// The phone reports when a round starts. If the round itself has not
+// arrived MISSING_AFTER_MIN later, the engineer gets one email.
+// Starts are kept in Script Properties (ROUND_STARTS) and removed when
+// the round arrives, is discarded, or after 7 days.
+// ============================================================
+const MISSING_AFTER_MIN = 90;
+function starts_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('ROUND_STARTS') || '{}'); } catch (e) { return {}; } }
+function saveStarts_(m) { PropertiesService.getScriptProperties().setProperty('ROUND_STARTS', JSON.stringify(m)); }
+function forgetStart_(rid, arrived) { const m = starts_(); if (m[rid]) { delete m[rid]; saveStarts_(m); } if (arrived) noteArrived_(rid); }
+function roundStarted_(user, req) {
+  if (!req.rid || !/^r[0-9a-z_-]{6,40}$/i.test(req.rid)) throw new Error('Round ID not valid.');
+  const m = starts_();
+  const done = (PropertiesService.getScriptProperties().getProperty('ROUNDS_DONE') || '').split(',');
+  if (done.indexOf(req.rid) >= 0) return {ok: true, already: true};   // round arrived before its start message
+  m[req.rid] = {email: user.email, name: user.name, tmpl: String(req.templateName || 'Round'), t0: req.t0 || new Date().toISOString()};
+  saveStarts_(m);
+  return {ok: true};
+}
+function roundDiscarded_(rid) { forgetStart_(rid); return {ok: true}; }
+// Called by submitRound_ via forgetStart_; also remember recent arrivals in case the start message comes later
+function noteArrived_(rid) {
+  const p = PropertiesService.getScriptProperties();
+  const done = (p.getProperty('ROUNDS_DONE') || '').split(',').filter(x => x);
+  done.push(rid); p.setProperty('ROUNDS_DONE', done.slice(-200).join(','));
+}
+// Time trigger (every 15 min, installed by setup)
+function checkMissingRounds() {
+  const m = starts_(), now = Date.now();
+  let changed = false;
+  Object.keys(m).forEach(rid => {
+    const s = m[rid], age = (now - new Date(s.t0).getTime()) / 60000;
+    if (age > 7 * 24 * 60) { delete m[rid]; changed = true; return; }
+    if (s.emailed || age < MISSING_AFTER_MIN) return;
+    const when = Utilities.formatDate(new Date(s.t0), CONFIG.TIMEZONE, 'h:mm a');
+    const day = Utilities.formatDate(new Date(s.t0), CONFIG.TIMEZONE, 'MM/dd/yyyy');
+    try {
+      MailApp.sendEmail({to: s.email, name: 'Rounds',
+        subject: 'Your ' + s.tmpl + ' (' + when + ') has not reached the Sheet',
+        body: 'Your ' + s.tmpl + ' started ' + when + ' on ' + day + " hasn't reached the Sheet.\n\n" +
+          "It's safe on your phone. Open the Rounds app with signal to send it.\n\n" +
+          'If you discarded this round, you can ignore this email.'});
+      s.emailed = new Date().toISOString(); changed = true;
+    } catch (e) { Logger.log('Missing round email failed: ' + e.message); }
+  });
+  if (changed) saveStarts_(m);
 }
