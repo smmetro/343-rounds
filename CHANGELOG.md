@@ -1,5 +1,54 @@
 # Changelog
 
+## v2.3.0 app + server (2026-11-25)
+Server deploy required: paste Tests.gs (and Code.gs if v2.2.0 is not deployed yet), then Manage deployments > New version. No `setup` needed beyond v2.2.0's.
+
+Generator Monthly Test (from the first live run)
+- After each reading set, a clear choice: "Take Next Reading Set" or "End Test: Stop The Generator". The old screen's Next button ended the readings after one set.
+- Shows when the next reading is due (10 min after set 1); ending with fewer than 3 sets asks first
+- Start step warning: "Prepare to start stopwatch"
+- Pre-run: Radiator Cooling Fan 1, Generator Cooling Fan 1 and Generator Cooling Pump 1 condition are separate checks and separate rows (the combined row bled into the line above on the PDF)
+- Voltage V1-2, V2-3, V3-1 (normal 470 to 490 V); Current A-1, A-2, A-3
+- Engine Heat Exchanger: Engine Coolant To HX / From HX, Garage Radiator To HX / From HX (app shows which is hot / cooled), then Engine Coolant Level (Normal / High / Low; High and Low print red) and Radiator Cooling Fan 1 Running
+- Fuel Heat Exchanger: Fuel To HX (70 to 110 °F), Fuel From HX (70 to 90 °F), Engine Fuel Supply Temp
+- Radiator Loop Pressure replaced by Generator Cooling Pump: Suction Pressure 1 to 3 psi, Discharge Pressure 9 to 11 psi
+- Checked Every Reading Set: Generator Cooling Fan 1 Running only. Removed: Radiator Cooling Fan 1 Area condition per set, and the Confirmed Running (Once During Test) section
+- Editing a saved test: reading sets can be added, with the time they were taken
+- PDF: every word capitalized, text vertically centered in cells, slightly taller rows
+- Earlier tests keep their readings (same internal IDs); the old combined condition check fills all three new rows; old coolant level ✓ shows as Normal
+
+All rounds and test forms
+- Reading names, sections and test steps show with every word capitalized. Display only: names stored in the Sheet and its columns are unchanged, so no duplicate columns.
+
+## v2.2.0 app + server (2026-11-25)
+Server deploy required: paste Code.gs and Tests.gs, run `setup` once (approve the new trigger permission), then Manage deployments > New version.
+
+Rounds: no more waiting at the end
+- After Submit the screen says "Saved on this phone. Safe to close the app. It sends automatically when you have signal." and returns to Rounds by itself
+- The phone tells the server when a round starts. Every 15 minutes the server checks for rounds started more than 90 minutes ago that never arrived and emails that engineer once: "Your Morning Rounds started 6:12 AM hasn't reached the Sheet. It's safe on your phone. Open the Rounds app with signal to send it."
+- Discarding a round tells the server, so no email is sent for it
+- The phone asks the browser to keep its storage (waiting rounds are not cleared when the phone is low on space)
+- "Export" button in the sync bar while anything is waiting: shares the unsent rounds and tests as a file (email, text, Files) as a last resort
+
+Elevator Phase I & II
+- Removed Call Cancel Function (app and printout)
+- Left / right items combined into one pass / fail each: Emergency Bell Function, Door Close Button, Door Open Button
+- "Confirm elevator phone operation" renamed Elevator Phone Operation
+- Every word in every item title capitalized
+- Fail note: the note box opens blank; the car and item are added on save: "Car C · Door Close Button Failure: Button sticks."
+- Older tests opened from Past Tests: a left or right fail shows as a fail on the combined item
+- Printout revision date 11/25/2026
+
+Electric Fire Pump Monthly
+- Chained start: new first step "Confirm diesel controller HOA switch is in Off"
+- Standalone: "Turn off diesel fire pump" renamed "Select Off on diesel controller HOA switch"
+- 1.15 Wet Pit Suction Screens removed; prints N/A
+- Start step shows a highlighted warning: "Prepare stopwatch to record run time"
+
+Diesel Fire Pump Weekly
+- Start warning now reads "Be prepared to read cranking voltage upon start. Below 9 V = Fail"
+- "Test jockey pump operation" is now Pass / Fail and fills 1.40 Power to Pressure Maintenance (Jockey) Pump; 1.40 is no longer asked in pre-checks. When chained, the same result fills electric 1.36
+
 ## v2.1.3 app (2026-11-05)
 Diesel fire pump changes (app only, no server deploy needed)
 - Start step shows a highlighted warning: "Be prepared to read cranking voltage upon start"

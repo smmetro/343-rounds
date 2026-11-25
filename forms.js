@@ -115,9 +115,9 @@ function renderTest(){
   const s=curStep(),f=TEST_FORMS[T.form];
   $('t-name').textContent=(T.cancel?'Canceling · ':T.mode==='edit'?'Editing · ':'')+f.name;
   $('t-prog').textContent=(T.idx+1)+' / '+TS.length;$('t-fill').style.width=((T.idx+1)/TS.length*100)+'%';
-  $('t-sec').textContent=s.sec||'';
+  $('t-sec').textContent=tc(s.sec||'');
   $('t-num').textContent=s.num?'Item '+s.num:'';$('t-num').style.display=s.num?'':'none';
-  $('t-label').textContent=s.label;
+  $('t-label').textContent=tc(s.label);
   const d=$('t-desc');d.textContent=s.desc||'';d.style.display=s.desc?'':'none';
   const hint=s.hint||(s.lo!==undefined?'Normal: '+s.lo+' to '+s.hi+' '+(s.unit||''):'');
   const h=$('t-hint');h.textContent=hint;h.style.display=hint?'':'none';h.classList.toggle('strong',!!s.hintWarn);
@@ -160,11 +160,12 @@ function refreshTStatus(){
     if(s.failBelow!==undefined&&n<s.failBelow){lvl='alert';text='Under '+s.failBelow+' '+s.unit+': this will be marked Fail.';}
   }
   if((s.kind==='pf'||s.kind==='procpf'||s.kind==='check')&&v==='F'){lvl='alert';text='Marked Fail';}
+  if(s.bad&&s.bad.includes(v)){lvl='alert';text=tc(s.label)+': '+v;}
   msg.className='msg'+(lvl?' '+lvl:'');msg.textContent=text;
   const vb=$('t-vbox');if(vb)vb.className='value-box'+(lvl?' lvl-'+lvl:'');
   const last=T.idx===TS.length-1;
   nn.className='nav-next'+(last?' review':'');nn.textContent=last?(T.cancel?'Finish ›':'Review ›'):'Next ›';
-  if(s.kind==='hub'){nn.textContent=(T.sets||[]).length?'Done with readings ›':'Add a reading set first';}
+  if(s.kind==='hub'){nn.textContent=T.mode==='edit'?'Next ›':(T.sets||[]).length?'End Test ›':'Take a reading set first';}
 }
 
 // ============================================================
@@ -199,23 +200,51 @@ function sameAsLast(s){
   const prev=s.set-1;GEN_FIELDS.filter(f=>f.same).forEach(f=>{const pv=T.v['s'+prev+'.'+f.id];if(pv!==undefined)T.v['s'+s.set+'.'+f.id]=pv;});
   saveT();let i=T.idx;while(i<TS.length-1&&TS[i].same&&TS[i].set===s.set)i++;T.idx=i;renderTest();toast('Copied voltage and current');
 }
+function setFlags(k){return GEN_FIELDS.filter(f=>{const v=T.v['s'+k+'.'+f.id];if(v===undefined)return false;
+  if(f.check)return v==='F';if(f.bad)return f.bad.includes(v);const n=parseFloat(v);return f.lo!==undefined&&(n<f.lo||n>f.hi);}).length;}
 function renderHub(area){
-  const sets=T.sets||[];
-  let h='<div class="card" style="padding:10px 12px"><div class="lbl" style="margin:0 0 6px">Reading sets ('+sets.length+' of '+GEN_MAX_SETS+')</div>';
-  if(!sets.length)h+='<div style="color:var(--txt2);font-size:13px">No readings yet. Tap Add Reading Set to record the first set.</div>';
-  sets.forEach((st,k)=>{const flags=GEN_FIELDS.filter(f=>{const v=T.v['s'+k+'.'+f.id];if(v===undefined)return false;if(f.check)return v==='F';const n=parseFloat(v);return f.lo!==undefined&&(n<f.lo||n>f.hi);}).length;
-    const filled=GEN_FIELDS.filter(f=>T.v['s'+k+'.'+f.id]!==undefined).length;
+  const sets=T.sets||[],n=sets.length,edit=T.mode==='edit';
+  let h='<div class="card" style="padding:10px 12px"><div class="lbl" style="margin:0 0 6px">Reading Sets ('+n+(n<GEN_TARGET_SETS?' of '+GEN_TARGET_SETS+' expected':'')+')</div>';
+  if(!n)h+='<div style="color:var(--txt2);font-size:13px">Take the first reading set right after the engine starts.</div>';
+  sets.forEach((st,k)=>{const flags=setFlags(k);const filled=GEN_FIELDS.filter(f=>T.v['s'+k+'.'+f.id]!==undefined).length;
     h+='<button class="jrow" onclick="goToSet('+k+')"><span class="jn">Set '+(k+1)+' · '+esc(st.time)+'</span><span class="jv '+(flags?'alert':'set')+'">'+filled+' entries'+(flags?' · '+flags+' flagged':'')+'</span></button>';});
-  h+='</div>';area.innerHTML=h;
-  if(sets.length<GEN_MAX_SETS){const b=document.createElement('button');b.className='btn btn-acc';b.style.marginTop='10px';b.textContent='+ Add Reading Set';b.onclick=addSet;area.appendChild(b);}
+  h+='</div>';
+  // when the next reading is due
+  if(n&&!edit){let due='';
+    if(n===1){const t=new Date(new Date(sets[0].t).getTime()+GEN_NEXT_MIN*60000);due='Next reading due about '+hhmm(t.toISOString())+' ('+GEN_NEXT_MIN+' min after set 1).';}
+    else if(n===2)due='Take at least one more reading set before stopping the generator.';
+    else due=n+' reading sets taken. You can end the test.';
+    h+='<div class="hint" style="display:block;margin:8px 2px">'+esc(due)+'</div>';}
+  area.innerHTML=h;
+  if(n<GEN_MAX_SETS){const b=document.createElement('button');b.className='btn btn-acc';b.id='hub-add';b.style.marginTop='10px';b.style.padding='18px';
+    b.textContent=n?'Take Next Reading Set ('+(n+1)+')':'Take Reading Set 1';b.onclick=addSet;area.appendChild(b);}
+  if(n&&!edit){const e=document.createElement('button');e.className='btn btn-danger';e.id='hub-end';e.style.marginTop='10px';e.style.padding='18px';
+    e.textContent='End Test: Stop The Generator';e.onclick=endReadings;area.appendChild(e);}
+}
+function endReadings(){
+  const n=(T.sets||[]).length;if(!n){toast('Take at least one reading set');return;}
+  if(n<GEN_TARGET_SETS&&!confirm(GEN_TARGET_SETS+' reading sets expected (start, about '+GEN_NEXT_MIN+' min in, and before stopping). You have '+n+'.\n\nEnd the test anyway?'))return;
+  T.idx=TS.findIndex(x=>x.kind==='hub')+1;saveT();renderTest();
+}
+// Editing a saved test: a new set needs the time it was actually taken
+function parseClock(txt,ymd){
+  const m=String(txt||'').trim().match(/^(\d{1,2})(?::?(\d{2}))?\s*([ap])?\.?m?\.?$/i);if(!m)return null;
+  let h=+m[1];const mi=+(m[2]||0),ap=(m[3]||'').toLowerCase();if(h>23||mi>59)return null;
+  if(ap==='p'&&h<12)h+=12;if(ap==='a'&&h===12)h=0;
+  const p=ymd.split('-').map(Number);return new Date(p[0],p[1]-1,p[2],h,mi);
 }
 function addSet(){
-  const now=new Date();T.sets.push({t:now.toISOString(),time:hhmm(now.toISOString())});
+  let when=new Date();
+  if(T.mode==='edit'){const t=prompt('Time reading set '+((T.sets||[]).length+1)+' was taken (for example 6:26 AM):');if(t===null)return;
+    const d=parseClock(t,T.date);if(!d){toast('Enter a time like 6:26 AM');return;}when=d;}
+  T.sets.push({t:when.toISOString(),time:hhmm(when.toISOString())});
   TS=buildSteps(T);T.idx=TS.findIndex(s=>s.set===T.sets.length-1);T.v.g_hub=String(T.sets.length);saveT();renderTest();
 }
 function goToSet(k){T.idx=TS.findIndex(s=>s.set===k);saveT();renderTest();}
 
 // Every Fail needs its entry before moving on
+// Elevator fail note: added on save, never shown in the text box. "Car C · Door Close Button Failure: <text>"
+function elevNotePrefix(s){return CAR_NAME(s.car).replace('Parking ','')+' · '+s.itemLabel+' Failure: ';}
 function failEntryMissing(s){
   const v=T.v[s.id];
   if(TEST_FORMS[T.form].kind==='aes'){
@@ -223,7 +252,11 @@ function failEntryMissing(s){
     const isFail=v==='F'||(s.failBelow!==undefined&&v!==undefined&&v!==''&&parseFloat(v)<s.failBelow);
     return isFail&&!T.defs.some(d=>d.item===item);
   }
-  if(T.form==='elevator')return v==='F'&&!T.notes.some(n=>n.step===s.id);
+  if(T.form==='elevator'){
+    if(v!=='F')return false;const pre=elevNotePrefix(s),car=CAR_NAME(s.car).replace('Parking ','');
+    // Edited records keep notes as text only; an older note naming the car still counts
+    return !T.notes.some(n=>n.step===s.id||n.text.startsWith(pre)||(T.mode==='edit'&&n.text.startsWith(car)));
+  }
   return false;
 }
 function requireFailEntry(s){
@@ -236,7 +269,8 @@ function requireFailEntry(s){
 // ============================================================
 function testNext(){
   const s=curStep();
-  if(s.kind==='hub'&&!(T.sets||[]).length){toast('Add at least one reading set');return;}
+  if(s.kind==='hub'&&!(T.sets||[]).length){toast('Take at least one reading set');return;}
+  if(s.kind==='hub'&&T.mode!=='edit'){endReadings();return;}
   if(s.gate&&!answered(s.id)){toast('Complete this step before moving on');return;}
   if(s.failBelow!==undefined&&failEntryMissing(s)){
     if(!confirm('Item '+s.num+' is under '+s.failBelow+' '+s.unit+' and will be marked FAIL.\n\nA deficiency or comment entry will be required.'))return;
@@ -259,16 +293,16 @@ function testGoTo(i){
 function openTJump(){
   const el=$('tjump-list');el.innerHTML='';let lastSec=null;const g=T.mode==='edit'?TS.length:firstOpenGate();
   TS.forEach((s,i)=>{
-    if(s.sec!==lastSec){const h=document.createElement('div');h.className='jump-sec';h.textContent=s.sec;el.appendChild(h);lastSec=s.sec;}
+    if(s.sec!==lastSec){const h=document.createElement('div');h.className='jump-sec';h.textContent=tc(s.sec);el.appendChild(h);lastSec=s.sec;}
     const b=document.createElement('button');b.className='jrow'+(i===T.idx?' cur':'');if(i>g)b.style.opacity='.45';
-    b.innerHTML='<span class="jn">'+(s.num?'<b>'+esc(s.num)+'</b> ':'')+esc(s.label)+'</span><span class="jv num '+valClass(s)+'">'+esc(valText(s))+'</span>';
+    b.innerHTML='<span class="jn">'+(s.num?'<b>'+esc(s.num)+'</b> ':'')+esc(tc(s.label))+'</span><span class="jv num '+valClass(s)+'">'+esc(valText(s))+'</span>';
     b.onclick=()=>testGoTo(i);el.appendChild(b);
   });
   $('ov-tjump').classList.add('open');const c=el.querySelector('.cur');if(c)c.scrollIntoView({block:'center'});
 }
 function valText(s){const v=T.v[s.id];if(s.kind==='hub')return (T.sets||[]).length+' sets';if(v===undefined||v==='')return s.gate?'Required':'—';
   if(s.kind==='event'||s.kind==='proc')return s.kind==='event'?hhmm(v):'Done';return v+(s.kind==='num'&&s.unit?' '+s.unit:'');}
-function valClass(s){const v=T.v[s.id];if(v===undefined||v==='')return s.gate?'warn':'';if(v==='F')return 'alert';
+function valClass(s){const v=T.v[s.id];if(v===undefined||v==='')return s.gate?'warn':'';if(v==='F'||(s.bad&&s.bad.includes(v)))return 'alert';
   if(s.kind==='num'){const n=parseFloat(v);if((s.lo!==undefined&&(n<s.lo||n>s.hi))||(s.failBelow!==undefined&&n<s.failBelow))return'alert';}return 'set';}
 
 // ============================================================
@@ -298,14 +332,15 @@ function openTNote(s,required){
   noteStep=s;noteRequired=required;
   $('tnote-title').textContent=required?'Required note':'Notes';
   $('tnote-list').innerHTML=T.notes.map(n=>'<div class="prev-note">'+esc(n.text)+' <button class="link-btn" style="float:right;padding:0" onclick="delTNote(\''+n.id+'\')">Remove</button></div>').join('');
-  const pre=T.form==='elevator'&&s&&s.car&&T.v[s.id]==='F'&&required?CAR_NAME(s.car).replace('Parking ','')+' (F): '+s.itemLabel+'. ':(T.form==='generator'&&s&&s.set!==undefined&&required?'Set '+(s.set+1)+' '+s.label+': ':'');
+  const pre=T.form==='generator'&&s&&s.set!==undefined&&required?'Set '+(s.set+1)+' '+tc(s.label)+': ':'';
   $('tnote-ta').value=pre;$('ov-tnote').classList.add('open');
   setTimeout(()=>{const ta=$('tnote-ta');ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);},60);
 }
 function saveTNote(){
   const t=$('tnote-ta').value.trim();
   if(!t){if(noteRequired&&failEntryMissing(noteStep)){toast('Enter a note for the failed item');return;}closeTSheet();return;}
-  T.notes.push({id:uid('n'),step:noteStep?noteStep.id:'',text:t});saveT();closeTSheet();renderTest();toast('Note saved');
+  const elevFail=T.form==='elevator'&&noteStep&&noteStep.car&&T.v[noteStep.id]==='F'&&noteRequired;
+  T.notes.push({id:uid('n'),step:noteStep?noteStep.id:'',text:(elevFail?elevNotePrefix(noteStep):'')+t});saveT();closeTSheet();renderTest();toast('Note saved');
 }
 function delTNote(id){T.notes=T.notes.filter(n=>n.id!==id);saveT();openTNote(noteStep,noteRequired);}
 function closeTSheet(){['ov-tdef','ov-tnote','ov-tjump','ov-tcancel'].forEach(i=>$(i).classList.remove('open'));}
@@ -316,8 +351,9 @@ function closeTSheet(){['ov-tdef','ov-tnote','ov-tjump','ov-tcancel'].forEach(i=
 function startChainedElectric(){
   const held=makeRecord(T,'complete');
   const chainDone=Object.keys(T.v).filter(k=>/^(p_|start_)/.test(k));
-  const marks={'1.5':T.v['1.5']};if(T.v.p_knife)marks['1.35']='P';if(T.v.p_jtest)marks['1.36']='P';
+  const marks={'1.5':T.v['1.5']};if(T.v.p_knife)marks['1.35']='P';if(T.v.p_jtest)marks['1.36']=T.v.p_jtest==='F'?'F':'P';
   const carry=TS.filter(s=>s.id==='1.5').length?T.defs.filter(d=>d.item==='1.5').map(d=>Object.assign({},d,{id:uid('d')})):[];
+  T.defs.filter(d=>d.item==='1.40').forEach(d=>carry.push(Object.assign({},d,{id:uid('d'),item:'1.36'})));
   Object.entries(FP_CARRY).forEach(([dk,ek])=>{if(T.v[dk]!=null&&T.v[dk]!==''){marks[ek]=T.v[dk];T.defs.filter(d=>d.item===dk).forEach(d=>carry.push(Object.assign({},d,{id:uid('d'),item:ek})));}});
   T={id:uid('t'),form:'electric',mode:'new',chained:true,held,chainDone,t0:new Date().toISOString(),date:today(),tester:testerOf(),v:Object.assign({},marks),defs:carry,notes:[],sets:[],idx:0};
   saveT();TS=buildSteps(T);renderTest();toast('Diesel test held. Electric test started.');
@@ -369,10 +405,10 @@ function testReview(){
   closeTSheet();T.atReview=true;saveT();show('treview');
   const f=TEST_FORMS[T.form];let skipped=0,failed=0;const list=$('tr-list');list.innerHTML='';let lastSec=null;
   TS.forEach((s,i)=>{
-    if(s.sec!==lastSec){const h=document.createElement('div');h.className='jump-sec';h.textContent=s.sec;list.appendChild(h);lastSec=s.sec;}
+    if(s.sec!==lastSec){const h=document.createElement('div');h.className='jump-sec';h.textContent=tc(s.sec);list.appendChild(h);lastSec=s.sec;}
     const v=T.v[s.id];if((v===undefined||v==='')&&s.kind!=='hub')skipped++;if(valClass(s)==='alert')failed++;
     const b=document.createElement('button');b.className='jrow';
-    b.innerHTML='<span class="jn">'+(s.num?'<b>'+esc(s.num)+'</b> ':'')+esc(s.itemLabel&&s.car?s.label+' · '+s.itemLabel:s.label)+'</span><span class="jv num '+valClass(s)+'">'+esc(v===undefined||v===''?(s.kind==='hub'?valText(s):'Skipped'):valText(s))+'</span>';
+    b.innerHTML='<span class="jn">'+(s.num?'<b>'+esc(s.num)+'</b> ':'')+esc(tc(s.itemLabel&&s.car?s.label+' · '+s.itemLabel:s.label))+'</span><span class="jv num '+valClass(s)+'">'+esc(v===undefined||v===''?(s.kind==='hub'?valText(s):'Skipped'):valText(s))+'</span>';
     b.onclick=()=>testGoTo(i);list.appendChild(b);
   });
   const extra=f.kind==='aes'?T.defs.map(d=>'<div class="prev-note"><b>'+esc(d.item||'Test')+' · '+d.dc+'</b> '+esc(d.text)+'</div>').join(''):T.notes.map(n=>'<div class="prev-note">'+esc(n.text)+'</div>').join('');
@@ -409,7 +445,7 @@ async function saveTest(){
     await queueRecord(rec);
     const f=TEST_FORMS[T.form];
     $('done-sum').textContent=f.name+(T.held?' and Diesel Fire Pump Weekly':'')+' · '+mdy(rec.date);
-    T=null;saveT();testSavedScreen();show('done');$('done-status').className='done-status wait';$('done-status').textContent='Sending…';processOutbox();
+    T=null;saveT();testSavedScreen();show('done');updateDoneStatus();processOutbox();autoLeaveDone();
   }catch(e){toast('Could not save: '+e.message);}
   finally{btn.disabled=false;}
 }
@@ -455,7 +491,12 @@ function editRecord(id){
   const r=allRecords().find(x=>x.id===id);if(!r)return;
   const v=Object.assign({},r.values||{});const sets=[];
   (r.sets||[]).forEach((s,k)=>{sets.push({t:s.t,time:s.time});Object.keys(s.vals||{}).forEach(f=>v['s'+k+'.'+f]=s.vals[f]);});
-  if(r.form==='generator')v.g_type=r.testType||v.g_type;
+  if(r.form==='generator'){v.g_type=r.testType||v.g_type;
+    // v2.1 records: one combined condition check, coolant level was ✓ / F
+    if(v.g_cond2!==undefined){['g_cond_rcf','g_cond_gcf','g_cond_gcp'].forEach(k=>{if(v[k]===undefined)v[k]=v.g_cond2;});delete v.g_cond2;}
+    (r.sets||[]).forEach((st,k)=>{const c=v['s'+k+'.c_cool'];if(c==='✓')v['s'+k+'.c_cool']='Normal';else if(c==='F')v['s'+k+'.c_cool']='Low';});}
+  if(r.form==='elevator')Object.entries(ELEV_LEGACY).forEach(([k,olds])=>CARS.forEach(c=>{const ov=olds.map(o=>v['p2.'+o+'.'+c]).filter(x=>x);
+    if(ov.length&&v['p2.'+k+'.'+c]===undefined)v['p2.'+k+'.'+c]=ov.includes('F')?'F':'✓';olds.forEach(o=>delete v['p2.'+o+'.'+c]);delete v['p2.cancel.'+c];}));
   T={id:uid('t'),recordId:r.id,form:r.form,mode:'edit',status:r.status,t0:r.t0,date:r.date,cycle:r.cycle,tester:{key:r.tester,name:r.testerName,email:r.testerEmail},
     v,defs:(r.defs||[]).map(d=>Object.assign({id:uid('d')},d)),notes:(r.notes||[]).map(t=>({id:uid('n'),step:'',text:t})),sets,idx:0};
   saveT();TS=buildSteps(T);testReview();

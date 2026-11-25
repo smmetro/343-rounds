@@ -2,6 +2,8 @@
 // TEST FORM DEFINITIONS (Elevator, Generator, Diesel / Electric Fire Pump)
 // Spec: TEST_FORMS_SPEC.md in the Rounds project. Edit here, not in admin.
 // ============================================================
+// Title Case for display: capitalizes the first letter of every word, leaves existing capitals alone (CTWP, VFD, kW stays as typed in units)
+const tc=x=>String(x==null?'':x).replace(/(^|[\s\/(\-:])([a-z])/g,(m,p,c)=>p+c.toUpperCase());
 const CARS=['A','B','C','D','E','P'];
 const CAR_NAME=c=>c==='P'?'Parking Car P':'Car '+c;
 const FRACTIONS=['Empty','1/8','1/4','3/8','1/2','5/8','3/4','7/8','Full'];
@@ -47,7 +49,7 @@ const NUM_ITEMS={ // fire pump items entered as numbers
  electric:{suction:'psi',system:'psi','1.18':'sec','1.20':'psi','1.21':'psi','1.27':'sec','1.28':'min'}
 };
 const FP_PREFILL={diesel:{'1.1':'160','1.2':'185','1.3':'203','1.4':'225'},electric:{'1.1':'162','1.2':'182','1.3':'203','1.4':'225'}};
-const FP_NA={diesel:['1.16','1.29','1.31d','1.35','1.36','1.38','1.39','1.50','1.54','1.55','1.67'],electric:['1.30','1.31','1.32','1.33','1.34']};
+const FP_NA={diesel:['1.16','1.29','1.31d','1.35','1.36','1.38','1.39','1.50','1.54','1.55','1.67'],electric:['1.15','1.30','1.31','1.32','1.33','1.34']};
 const FP_HINT={
  diesel:{'1.48':'12 V system: below 9 V = Fail','1.53':'Pick the tank level as read on the gauge'},
  electric:{'1.28':'Required: 10 min. Under 10 is marked Fail.'}
@@ -60,7 +62,8 @@ const FP_PROC={
  p_valves:'Close Stair 1 and Stair 2 standpipe isolation valves',
  p_fans:'Turn on fire pump supply and exhaust fans',
  p_knife:'Open electric fire pump knife switch',
- p_dieseloff:'Turn off diesel fire pump',
+ p_dieseloff:'Select Off on diesel controller HOA switch',
+ c_hoa:'Confirm diesel controller HOA switch is in Off',
  p_jauto:'Ensure jockey pump is in Auto',
  p_jtest:'Test jockey pump operation',
  c_knife:'Close electric fire pump knife switch (electric fire pump to Auto)',
@@ -73,7 +76,7 @@ const FP_PROC={
  r_sec:'Inform Security fire pump test is complete'
 };
 // Which restore step undoes each procedural step (used by Cancel)
-const FP_UNDO={p_mon:['r_ann'],p_sec:['r_sec'],p_valves:['r_valves'],p_fans:['r_fans'],p_knife:['r_auto'],p_dieseloff:['r_auto'],c_knife:['r_auto'],
+const FP_UNDO={c_hoa:['r_auto'],p_mon:['r_ann'],p_sec:['r_sec'],p_valves:['r_valves'],p_fans:['r_fans'],p_knife:['r_auto'],p_dieseloff:['r_auto'],c_knife:['r_auto'],
   start_diesel:['r_hoa','r_auto'],start_electric:['r_knife','r_auto']};
 
 const DIESEL_PRE=['1.6','1.7','1.8','1.9','1.10','1.11','1.12','1.13','1.14','suction','1.15','system','1.17','1.24','1.25','1.34','1.37','1.40','1.41','1.42','1.43','1.44','1.45','1.46','1.47',
@@ -83,35 +86,39 @@ const DIESEL_RUN=['1.48','1.20','1.22','1.27','1.28','1.18','1.19','1.21','1.23'
 // Diesel 1.62 (Jacket Water Heater) is not asked; it copies 1.52's answer and any D / C entry
 const FP_COPY={diesel:{'1.62':'1.52'}};
 const FP_CARRY={'1.6':'1.6','1.7':'1.7','1.9':'1.9','1.12':'1.11','1.13':'1.12'};
-const ELECTRIC_PRE=['1.6','1.7','1.8','1.9','1.10','1.11','1.12','1.13','suction','1.14','system','1.15','1.16','1.26','1.29','1.35'];
+const ELECTRIC_PRE=['1.6','1.7','1.8','1.9','1.10','1.11','1.12','1.13','suction','1.14','system','1.16','1.26','1.29','1.35'];
 const ELECTRIC_RUN=['1.27','1.18','1.19','1.24','1.20','1.21','1.22','1.23','1.25','1.28','1.17'];
 
 // ---------- Generator ----------
-const GEN_FIELDS=[ // one reading set
+const GEN_FIELDS=[ // one reading set, in the order asked
  {id:'kw',label:'Load',unit:'kW',grp:'',loadBankOnly:true},
- {id:'oil',label:'Oil pressure',unit:'psi',lo:40,hi:50,grp:''},
- {id:'ect',label:'Engine coolant temp',unit:'°F',lo:160,hi:180,grp:''},
+ {id:'oil',label:'Oil Pressure',unit:'psi',lo:40,hi:50,grp:''},
+ {id:'ect',label:'Engine Coolant Temp',unit:'°F',lo:160,hi:180,grp:''},
  {id:'hz',label:'Frequency',unit:'Hz',grp:''},
- {id:'v_ab',label:'A-B',unit:'V',grp:'Voltage',same:true},{id:'v_ac',label:'A-C',unit:'V',grp:'Voltage',same:true},{id:'v_bc',label:'B-C',unit:'V',grp:'Voltage',same:true},
- {id:'a_a',label:'Phase A',unit:'A',grp:'Current',same:true},{id:'a_b',label:'Phase B',unit:'A',grp:'Current',same:true},{id:'a_c',label:'Phase C',unit:'A',grp:'Current',same:true},
- {id:'ehx_ci',label:'Engine coolant in',unit:'°F',lo:100,hi:165,grp:'Engine Heat Exchanger'},{id:'ehx_co',label:'Engine coolant out',unit:'°F',lo:100,hi:165,grp:'Engine Heat Exchanger'},
- {id:'ehx_ri',label:'Radiator loop in',unit:'°F',lo:75,hi:105,grp:'Engine Heat Exchanger'},{id:'ehx_ro',label:'Radiator loop out',unit:'°F',lo:75,hi:105,grp:'Engine Heat Exchanger'},
- {id:'fhx_i',label:'Fuel heat exchanger inlet',unit:'°F',lo:70,hi:110,grp:'Fuel Heat Exchanger'},{id:'fhx_o',label:'Fuel heat exchanger outlet',unit:'°F',lo:70,hi:90,grp:'Fuel Heat Exchanger'},
- {id:'fuel_sup',label:'Engine fuel supply temp',unit:'°F',lo:65,hi:85,grp:'Fuel Heat Exchanger'},
- {id:'rlp_i',label:'Inlet pressure',unit:'psi',lo:10,hi:14,grp:'Radiator Loop Pressure'},{id:'rlp_o',label:'Outlet pressure',unit:'psi',lo:2,hi:6,grp:'Radiator Loop Pressure'},
- {id:'c_cool',label:'Engine coolant level',check:true,grp:'Checked every reading set'},
- {id:'c_rcf',label:'Radiator Cooling Fan 1 running',check:true,grp:'Checked every reading set'},
- {id:'c_rcfa',label:'Radiator Cooling Fan 1 area: general condition',check:true,grp:'Checked every reading set'}
+ {id:'v_ab',label:'V1-2',unit:'V',lo:470,hi:490,grp:'Voltage',same:true},{id:'v_bc',label:'V2-3',unit:'V',lo:470,hi:490,grp:'Voltage',same:true},{id:'v_ac',label:'V3-1',unit:'V',lo:470,hi:490,grp:'Voltage',same:true},
+ {id:'a_a',label:'A-1',unit:'A',grp:'Current',same:true},{id:'a_b',label:'A-2',unit:'A',grp:'Current',same:true},{id:'a_c',label:'A-3',unit:'A',grp:'Current',same:true},
+ // IDs kept from v2.1 so earlier tests stay in place: ehx_co was "engine coolant out" (hot), ehx_ci "in" (cooled), ehx_ri "radiator loop in", ehx_ro "out"
+ {id:'ehx_co',label:'Engine Coolant To HX',hint:'Hot, coming off the engine',unit:'°F',lo:100,hi:165,grp:'Engine Heat Exchanger'},
+ {id:'ehx_ci',label:'Engine Coolant From HX',hint:'Cooled, going back to the engine',unit:'°F',lo:100,hi:165,grp:'Engine Heat Exchanger'},
+ {id:'ehx_ri',label:'Garage Radiator To HX',hint:'Cooled, coming back from the garage radiator',unit:'°F',lo:75,hi:105,grp:'Engine Heat Exchanger'},
+ {id:'ehx_ro',label:'Garage Radiator From HX',hint:'Heated, going out to the garage radiator',unit:'°F',lo:75,hi:105,grp:'Engine Heat Exchanger'},
+ {id:'c_cool',label:'Engine Coolant Level',choice:['Normal','High','Low'],bad:['High','Low'],grp:'Engine Heat Exchanger'},
+ {id:'c_rcf',label:'Radiator Cooling Fan 1 Running',check:true,grp:'Engine Heat Exchanger'},
+ {id:'fhx_i',label:'Fuel To HX',unit:'°F',lo:70,hi:110,grp:'Fuel Heat Exchanger'},{id:'fhx_o',label:'Fuel From HX',unit:'°F',lo:70,hi:90,grp:'Fuel Heat Exchanger'},
+ {id:'fuel_sup',label:'Engine Fuel Supply Temp',unit:'°F',lo:65,hi:85,grp:'Fuel Heat Exchanger'},
+ {id:'gcp_s',label:'Suction Pressure',unit:'psi',lo:1,hi:3,grp:'Generator Cooling Pump'},{id:'gcp_d',label:'Discharge Pressure',unit:'psi',lo:9,hi:11,grp:'Generator Cooling Pump'},
+ {id:'c_gcf',label:'Generator Cooling Fan 1 Running',check:true,grp:'Checked Every Reading Set'}
 ];
+const GEN_TARGET_SETS=3, GEN_NEXT_MIN=10; // start, about 10 min in, at least one more before stopping
 const GEN_MAX_SETS=6;
 
 // ---------- Elevator ----------
-const ELEV_P1=[['fcc','Fire Recall Function FCC Room'],['lobby','Fire Recall Function Lobby'],['parked','Verify cars are parked and locked out on fire mode']];
-const ELEV_P2=[['lamp','Emergency recall lamp activated'],['bell_l','Emergency Bell function / left side'],['bell_r','Emergency Bell function / right side'],
- ['close_l','Door close button / left side'],['close_r','Door close button / right side'],['photo','Photo over-ride disabled'],['open_l','Door open button / left side'],
- ['open_r','Door open button / right side'],['hold','Car Hold function'],['phone','Confirm elevator phone operation'],['addr','Operator identifies building address'],
- ['carid','Operator identifies car ID'],['cancel','Call cancel function']];
-const ELEV_P3=[['normal','Ensure car returns to normal operation']];
+const ELEV_P1=[['fcc','Fire Recall Function FCC Room'],['lobby','Fire Recall Function Lobby'],['parked','Verify Cars Are Parked And Locked Out On Fire Mode']];
+const ELEV_P2=[['lamp','Emergency Recall Lamp Activated'],['bell','Emergency Bell Function'],['close','Door Close Button'],['photo','Photo Over-Ride Disabled'],
+ ['open','Door Open Button'],['hold','Car Hold Function'],['phone','Elevator Phone Operation'],['addr','Operator Identifies Building Address'],['carid','Operator Identifies Car ID']];
+// v2.1 items now combined (left / right) or removed. Old records are read through this map (any F = F).
+const ELEV_LEGACY={bell:['bell_l','bell_r'],close:['close_l','close_r'],open:['open_l','open_r']};
+const ELEV_P3=[['normal','Ensure Car Returns To Normal Operation']];
 
 const TEST_FORMS={
  elevator:{id:'elevator',name:'Elevator Phase I & II',short:'Elevator Phase I and II Test',icon:'🛗',desc:'Monthly emergency operations test, Cars A to E and P',kind:'sheet'},
@@ -138,9 +145,10 @@ function buildDieselSteps(T){
   const proc=(id,sec,extra)=>S.push(Object.assign({id,kind:'proc',sec,label:FP_PROC[id],gate:true},extra||{}));
   proc('p_mon',P);proc('p_sec',P);proc('p_valves',P);
   S.push({id:'p_fans',kind:'procpf',sec:P,label:FP_PROC.p_fans,marks:'1.5',num:'1.5',gate:true});
-  proc('p_knife',P);proc('p_jauto',P);proc('p_jtest',P);
-  DIESEL_PRE.forEach(k=>S.push(fpItemStep('diesel',k,'Pre-checks')));
-  S.push({id:'start_diesel',kind:'event',sec:'Start',label:'Start the diesel fire pump',desc:'Drop pressure at the test valve beneath the diesel fire pump controller.',hint:'⚠ Be prepared to read cranking voltage upon start',hintWarn:true,btn:'Pump started',gate:true});
+  proc('p_knife',P);proc('p_jauto',P);
+  S.push({id:'p_jtest',kind:'procpf',sec:P,label:FP_PROC.p_jtest,marks:'1.40',num:'1.40',gate:true});
+  DIESEL_PRE.forEach(k=>{if(k==='1.40')return;S.push(fpItemStep('diesel',k,'Pre-checks'));});
+  S.push({id:'start_diesel',kind:'event',sec:'Start',label:'Start the diesel fire pump',desc:'Drop pressure at the test valve beneath the diesel fire pump controller.',hint:'⚠ Be prepared to read cranking voltage upon start. Below 9 V = Fail',hintWarn:true,btn:'Pump started',gate:true});
   DIESEL_RUN.forEach(k=>S.push(fpItemStep('diesel',k,'While running')));
   proc('r_hoa','End of test');
   S.push(fpItemStep('diesel','1.30','End of test'));
@@ -151,13 +159,13 @@ function buildDieselSteps(T){
 function buildElectricSteps(T){
   const S=[],P='Pre-run procedure';
   const proc=(id,sec,extra)=>S.push(Object.assign({id,kind:'proc',sec,label:FP_PROC[id],gate:true},extra||{}));
-  if(T.chained){proc('c_knife','Start of electric test');}
+  if(T.chained){proc('c_hoa','Start of electric test');proc('c_knife','Start of electric test');}
   else{proc('p_mon',P);proc('p_sec',P);proc('p_valves',P);
     S.push({id:'p_fans',kind:'procpf',sec:P,label:FP_PROC.p_fans,marks:'1.5',num:'1.5',gate:true});
     proc('p_dieseloff',P);proc('p_jauto',P);
     S.push({id:'p_jtest',kind:'procpf',sec:P,label:FP_PROC.p_jtest,marks:'1.36',num:'1.36',gate:true});}
   ELECTRIC_PRE.forEach(k=>{if(T.chained&&(k==='1.35'||Object.values(FP_CARRY).includes(k)))return;S.push(fpItemStep('electric',k,'Pre-checks'));});
-  S.push({id:'start_electric',kind:'event',sec:'Start',label:'Start the electric fire pump',desc:'Open the sensing line valve at the electric fire pump controller.',btn:'Pump started',gate:true});
+  S.push({id:'start_electric',kind:'event',sec:'Start',label:'Start the electric fire pump',desc:'Open the sensing line valve at the electric fire pump controller.',hint:'⚠ Prepare stopwatch to record run time',hintWarn:true,btn:'Pump started',gate:true});
   ELECTRIC_RUN.forEach(k=>S.push(fpItemStep('electric',k,'While running')));
   const R='Restore to normal';
   ['r_knife','r_valves','r_fans'].forEach(id=>proc(id,R));
@@ -170,7 +178,7 @@ function buildGeneratorSteps(T){
   S.push({id:'g_type',kind:'choice',sec:'Test type',label:'Which test is this?',opts:['No-Load','ATS Transfer','Load Bank'],gate:true});
   const P='Pre-run procedure';
   [['g_sec','Notify Security of generator test'],['g_sie','Siemens monitoring: put supervisories on ignore'],['g_atsal','Basement ATS: no active alarms'],
-   ['g_cond1','General condition: generator and day tank'],['g_cond2','General condition: Radiator Cooling Fan 1, Generator Cooling Fan 1, Generator Cooling Pump 1']]
+   ['g_cond1','General condition: generator and day tank'],['g_cond_rcf','Radiator Cooling Fan 1 condition'],['g_cond_gcf','Generator Cooling Fan 1 condition'],['g_cond_gcp','Generator Cooling Pump 1 condition']]
     .forEach(([id,l])=>S.push({id,kind:'check',sec:P,label:l,gate:true}));
   const Q='Pre-start readings';
   S.push({id:'g_ctl',kind:'choice',sec:Q,label:'Control switch status',opts:['Auto','Off','Run']});
@@ -180,19 +188,18 @@ function buildGeneratorSteps(T){
   S.push({id:'g_blk',kind:'num',sec:Q,label:'Block heater temp',unit:'°F'});
   S.push({id:'g_day',kind:'frac',sec:Q,label:'Day tank fuel level (pre)'});
   S.push({id:'g_hrs1',kind:'num',sec:Q,label:'Hours (start)',unit:'hrs'});
-  S.push({id:'g_start',kind:'event',sec:'Start',label:ats?'Start the generator (ATS transfer)':'Start the generator',btn:'Engine started',gate:true});
+  S.push({id:'g_start',kind:'event',sec:'Start',label:ats?'Start the generator (ATS transfer)':'Start the generator',hint:'⚠ Prepare to start stopwatch',hintWarn:true,btn:'Engine started',gate:true});
   if(ats){S.push({id:'g_ats1',kind:'choice',sec:'ATS transfer',label:'ATS-1',opts:['Transferred to Emergency','N/A'],gate:true});
     S.push({id:'g_ats2',kind:'choice',sec:'ATS transfer',label:'ATS-2',opts:['Transferred to Emergency','N/A'],gate:true});}
   (T.sets||[]).forEach((set,k)=>{
     GEN_FIELDS.forEach(f=>{
       if(f.loadBankOnly&&!lb)return;
-      S.push({id:'s'+k+'.'+f.id,set:k,field:f.id,kind:f.check?'check':'num',sec:'Reading set '+(k+1)+' · '+set.time,grp:f.grp,
-        label:(f.grp&&!f.check?f.grp+': ':'')+f.label,unit:f.unit,lo:f.lo,hi:f.hi,same:f.same});
+      const grpPre=f.grp&&['Voltage','Current','Generator Cooling Pump'].includes(f.grp)?f.grp+' '+f.label:f.label;
+      S.push({id:'s'+k+'.'+f.id,set:k,field:f.id,kind:f.check?'check':f.choice?'choice':'num',opts:f.choice,bad:f.bad,sec:'Reading set '+(k+1)+' · '+set.time,grp:f.grp,
+        label:grpPre,desc:f.hint||'',unit:f.unit,lo:f.lo,hi:f.hi,same:f.same});
     });
   });
-  S.push({id:'g_hub',kind:'hub',sec:'Running readings',label:'Running readings',gate:true});
-  S.push({id:'g_gcf',kind:'check',sec:'Confirm once while running',label:'Generator Cooling Fan 1 running'});
-  S.push({id:'g_gcp',kind:'check',sec:'Confirm once while running',label:'Generator Cooling Pump 1 running'});
+  S.push({id:'g_hub',kind:'hub',sec:'Running readings',label:'Reading sets',gate:true});
   const D='Shutdown';
   S.push({id:'g_stop',kind:'event',sec:D,label:'Stop the generator',btn:'Engine stopped',gate:true});
   S.push({id:'g_hrs2',kind:'num',sec:D,label:'Hours (stop)',unit:'hrs'});
@@ -217,7 +224,8 @@ function buildSteps(T){
     const out=[];
     f.forEach(s=>{
       if(s.kind==='procpf'){const items=TEST_FORMS[T.form].items;out.push({id:s.marks,item:s.marks,kind:'pf',sec:'Pre-run procedure',label:items[s.marks],num:s.marks});return;}
-      if(['proc','event','chain','hub'].includes(s.kind))return;
+      if(['proc','event','chain'].includes(s.kind))return;
+      if(s.kind==='hub'){out.push(Object.assign({},s,{gate:false}));return;}
       out.push(Object.assign({},s,{gate:false}));
     });
     if(T.form==='electric'&&T.v['1.35']!==undefined&&!out.some(s=>s.id==='1.35'))out.push(fpItemStep('electric','1.35','Pre-checks'));

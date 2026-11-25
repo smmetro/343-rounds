@@ -183,7 +183,7 @@ textarea:focus{border-color:var(--acc)}
     <div class="sub" id="who"></div>
   </div>
   <div class="pad">
-    <div class="sync-bar" id="sync-bar"><span class="dot"></span><span class="grow" id="sync-text">All rounds sent</span><button class="link-btn" id="sync-btn" onclick="syncAction()" style="display:none">Retry</button></div>
+    <div class="sync-bar" id="sync-bar"><span class="dot"></span><span class="grow" id="sync-text">All rounds sent</span><button class="link-btn" id="sync-exp" onclick="exportUnsent()" style="display:none">Export</button><button class="link-btn" id="sync-btn" onclick="syncAction()" style="display:none">Retry</button></div>
     <div id="resume"></div>
     <div class="lbl">Start a round</div>
     <div id="round-cards"></div>
@@ -259,7 +259,7 @@ textarea:focus{border-color:var(--acc)}
 // ============================================================
 // CONFIG
 // ============================================================
-const APP_VERSION='2.1.3';
+const APP_VERSION='2.3.0';
 const CLIENT_ID='1029316106419-u8cc3mq65a5fos9gp3074d0bbfkvsgsr.apps.googleusercontent.com';
 const API_URL='https://script.google.com/macros/s/AKfycbz5JBeX5EPFHx4Q5Lpz40yGsy2g8fcQ7OxW1AXjR01gtkGDhYAbNQRDBXFThlHZzSuNqg/exec';
 const MAX_PHOTOS=5;
@@ -335,6 +335,8 @@ async function api(action,data,timeoutMs){
 async function init(){
   makeIcon();
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+  // Ask the browser not to clear the outbox when the phone is low on space
+  try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});}catch(e){}
   R=lsGet(K.active,null);
   if(!SESSION){showSignIn();return;}
   if(BOOT){renderRounds();show('rounds');}
@@ -363,7 +365,7 @@ async function onGoogle(resp){
   }catch(e){$('signin-err').textContent=e.message;}
 }
 async function signOut(){
-  const pending=(await dbAll('outbox')).length;
+  const pending=(await dbAll('outbox')).filter(realItem).length;
   if(pending){toast('Wait until waiting rounds and tests are sent');return;}
   if(R&&!confirm('Sign out and discard the round in progress?'))return;
   if(T){toast('Finish or cancel the test in progress first');return;}
@@ -437,13 +439,18 @@ function startRound(tid){
   R.active=activeLogs();
   if(!R.active.length){toast('This round has no readings yet');R=null;return;}
   saveR();show('log');render();
+  // Tell the server a round started, so it can email if the round never arrives (sent like any outbox item)
+  dbPut('outbox',{id:'start_'+R.rid,type:'start',payload:{rid:R.rid,templateName:R.tmpl.name,t0:R.t0},added:Date.now(),tries:0}).then(()=>processOutbox()).catch(()=>{});
 }
 function resumeRound(){if(!R)return;R.active=activeLogs();R.idx=Math.min(R.idx,R.active.length-1);show('log');render();}
 async function discardRound(silent){
   if(!R)return;
   if(!silent&&!confirm('Discard '+R.tmpl.name+'? Readings entered so far will be lost.'))return;
   for(const id in R.photos)for(const pid of R.photos[id])await dbDel('photos',pid).catch(()=>{});
-  R=null;lsDel(K.active);renderRounds();
+  const rid=R.rid;
+  try{if(await dbGet('outbox','start_'+rid))await dbDel('outbox','start_'+rid);
+    else await dbPut('outbox',{id:'discard_'+rid,type:'discard',payload:{rid},added:Date.now(),tries:0});}catch(e){}
+  R=null;lsDel(K.active);renderRounds();processOutbox();
 }
 function saveR(){if(R){const copy=Object.assign({},R);delete copy.active;lsSet(K.active,copy);}}
 function leaveRound(){saveR();renderRounds();show('rounds');}
@@ -527,8 +534,8 @@ function render(){
   $('tname').textContent=R.tmpl.name;
   $('ptxt').textContent=(R.idx+1)+' / '+total;
   $('pfill').style.width=(((R.idx+1)/total)*100)+'%';
-  $('sbadge').textContent=l.sec;
-  $('lname').textContent=l.name;
+  $('sbadge').textContent=tc(l.sec);
+  $('lname').textContent=tc(l.name);
   const d=$('ldesc');d.textContent=l.desc||'';d.style.display=l.desc?'':'none';d.classList.remove('open');
 
   const hist=historyFor(l.id);
@@ -634,10 +641,10 @@ function goTo(i){R.idx=i;saveR();closeSheets();show('log');render();}
 function openJump(){
   const el=$('jump-list');el.innerHTML='';let lastSec=null;
   R.active.forEach((l,i)=>{
-    if(l.sec!==lastSec){const s=document.createElement('div');s.className='jump-sec';s.textContent=l.sec;el.appendChild(s);lastSec=l.sec;}
+    if(l.sec!==lastSec){const s=document.createElement('div');s.className='jump-sec';s.textContent=tc(l.sec);el.appendChild(s);lastSec=l.sec;}
     const v=R.vals[l.id],lvl=levelFor(l,v);
     const b=document.createElement('button');b.className='jrow'+(i===R.idx?' cur':'');
-    b.innerHTML='<span class="jn">'+esc(l.name)+'</span>'+(R.notes[l.id]?'<span class="ic">📝</span>':'')+((R.photos[l.id]||[]).length?'<span class="ic">📷</span>':'')+
+    b.innerHTML='<span class="jn">'+esc(tc(l.name))+'</span>'+(R.notes[l.id]?'<span class="ic">📝</span>':'')+((R.photos[l.id]||[]).length?'<span class="ic">📷</span>':'')+
       '<span class="jv num '+(v===undefined?'':lvl||'set')+'">'+(v===undefined?'—':esc(v)+(l.unit&&l.type==='numeric'?' '+esc(l.unit):''))+'</span>';
     b.onclick=()=>goTo(i);el.appendChild(b);
   });
@@ -650,7 +657,7 @@ function closeSheets(){document.querySelectorAll('.overlay').forEach(o=>o.classL
 // NOTES
 // ============================================================
 function openNote(){
-  const l=cur();$('note-title').textContent='Note · '+l.name;
+  const l=cur();$('note-title').textContent='Note · '+tc(l.name);
   const ln=lastNoteFor(l.id);
   $('note-prev').innerHTML=ln&&ln.note?'<div class="prev-note"><b>Last note</b> · '+esc(fmtDay(ln.date))+' · '+esc(ln.by)+'<br>'+esc(ln.note)+'</div>':'';
   $('note-ta').value=R.notes[l.id]||'';
@@ -664,7 +671,7 @@ function clearNote(){$('note-ta').value='';saveNote();}
 // PHOTOS: shrunk on the phone, kept in IndexedDB until uploaded
 // ============================================================
 function openPhotos(){
-  const l=cur();$('photo-title').textContent='Photos · '+l.name;
+  const l=cur();$('photo-title').textContent='Photos · '+tc(l.name);
   renderPhotoGrid();$('ov-photo').classList.add('open');
 }
 async function renderPhotoGrid(){
@@ -707,11 +714,11 @@ function goReview(){
   const logs=R.active;let skipped=0,flagged=0,notes=0,photos=0;
   const list=$('review-list');list.innerHTML='';let lastSec=null;
   logs.forEach((l,i)=>{
-    if(l.sec!==lastSec){const s=document.createElement('div');s.className='jump-sec';s.textContent=l.sec;list.appendChild(s);lastSec=l.sec;}
+    if(l.sec!==lastSec){const s=document.createElement('div');s.className='jump-sec';s.textContent=tc(l.sec);list.appendChild(s);lastSec=l.sec;}
     const v=R.vals[l.id],lvl=levelFor(l,v);
     if(v===undefined)skipped++;if(lvl)flagged++;if(R.notes[l.id])notes++;if((R.photos[l.id]||[]).length)photos++;
     const b=document.createElement('button');b.className='jrow';
-    b.innerHTML='<span class="jn">'+esc(l.name)+'</span>'+(R.notes[l.id]?'<span class="ic">📝</span>':'')+((R.photos[l.id]||[]).length?'<span class="ic">📷</span>':'')+
+    b.innerHTML='<span class="jn">'+esc(tc(l.name))+'</span>'+(R.notes[l.id]?'<span class="ic">📝</span>':'')+((R.photos[l.id]||[]).length?'<span class="ic">📷</span>':'')+
       '<span class="jv num '+(v===undefined?'':lvl||'set')+'">'+(v===undefined?'Skipped':esc(v)+(l.unit&&l.type==='numeric'?' '+esc(l.unit):''))+'</span>';
     b.onclick=()=>goTo(i);list.appendChild(b);
   });
@@ -741,16 +748,19 @@ async function submitRound(){
   $('done-sum').textContent=Object.keys(vals).length+' readings'+(flagged?' · '+flagged+' alert'+(flagged>1?'s':''):'')+' · '+R.tmpl.name;
   R=null;lsDel(K.active);btn.disabled=false;
   $('done-title').textContent='Round saved';
-  show('done');updateDoneStatus();processOutbox();
+  show('done');updateDoneStatus();processOutbox();autoLeaveDone();
 }
 async function updateDoneStatus(){
   const el=$('done-status');if(!el)return;
-  const ob=await dbAll('outbox'),ph=(await dbAll('photos')).filter(p=>p.queued);
+  const ob=(await dbAll('outbox')).filter(realItem),ph=(await dbAll('photos')).filter(p=>p.queued);
   if(!ob.length&&!ph.length){el.className='done-status ok';el.textContent=$('done-title').textContent==='Test saved'?'✓ Saved to Drive':'✓ Sent to the Sheet';return;}
-  el.className='done-status wait';
-  el.textContent=needsSignIn?'Sign in again to send it':(navigator.onLine===false?'No signal. It will send automatically when you have signal.':'Sending'+(ph.length?' ('+ph.length+' photo'+(ph.length>1?'s':'')+' left)':'')+'…');
+  if(needsSignIn){el.className='done-status wait';el.textContent='Saved on this phone. Sign in again to send it.';return;}
+  // Saved in the outbox already: nothing to wait for
+  el.className='done-status ok';el.textContent='✓ Saved on this phone. Safe to close the app. It sends automatically when you have signal.';
 }
-function goRounds(){renderRounds();show('rounds');refreshBoot();}
+let doneTimer=null;
+function autoLeaveDone(){clearTimeout(doneTimer);doneTimer=setTimeout(()=>{if($('s-done').classList.contains('active'))goRounds();},2500);}
+function goRounds(){clearTimeout(doneTimer);renderRounds();show('rounds');refreshBoot();}
 function testSavedScreen(){$('done-title').textContent='Test saved';}
 
 // ============================================================
@@ -761,7 +771,11 @@ async function processOutbox(){
   syncing=true;updateSyncBar();
   try{
     for(const item of (await dbAll('outbox')).sort((a,b)=>a.added-b.added)){
-      try{if(item.type==='test')await sendTestItem(item);else await api('submitRound',{round:item.payload},45000);await dbDel('outbox',item.id);}
+      try{if(item.type==='test')await sendTestItem(item);
+        else if(item.type==='start')await api('roundStarted',item.payload,15000);
+        else if(item.type==='discard')await api('roundDiscarded',item.payload,15000);
+        else await api('submitRound',{round:item.payload},45000);
+        await dbDel('outbox',item.id);}
       catch(e){if(e.code==='AUTH'){needsSignIn=true;break;}item.tries++;item.err=e.message;await dbPut('outbox',item);if(e.code==='NET')break;}
     }
     if(!needsSignIn){
@@ -777,9 +791,9 @@ async function processOutbox(){
 }
 async function updateSyncBar(){
   const bar=$('sync-bar');if(!bar)return;
-  let ob=[],ph=[];try{ob=await dbAll('outbox');ph=(await dbAll('photos')).filter(p=>p.queued);}catch(e){}
+  let ob=[],ph=[];try{ob=(await dbAll('outbox')).filter(realItem);ph=(await dbAll('photos')).filter(p=>p.queued);}catch(e){}
   const btn=$('sync-btn'),txt=$('sync-text');
-  bar.className='sync-bar';btn.style.display='none';
+  bar.className='sync-bar';btn.style.display='none';$('sync-exp').style.display='none';
   if(needsSignIn){bar.className='sync-bar auth';txt.textContent='Signed out. Sign in to keep sending rounds.';btn.textContent='Sign in';btn.style.display='';return;}
   if(!ob.length&&!ph.length){txt.textContent='All rounds and tests sent';return;}
   bar.className='sync-bar pending';
@@ -787,6 +801,18 @@ async function updateSyncBar(){
   const parts=[];if(nr)parts.push(nr+' round'+(nr>1?'s':''));if(nt)parts.push(nt+' test'+(nt>1?'s':''));if(ph.length)parts.push(ph.length+' photo'+(ph.length>1?'s':''));
   txt.textContent=(syncing?'Sending ':'Waiting to send ')+parts.join(', ');
   if(!syncing){btn.textContent='Retry';btn.style.display='';}
+  $('sync-exp').style.display=ob.length?'':'none';
+}
+function realItem(o){return o.type!=='start'&&o.type!=='discard';}
+// Last resort: share the waiting rounds / tests as a file (email, text, Files) so nothing is lost
+async function exportUnsent(){
+  const items=(await dbAll('outbox')).filter(realItem);if(!items.length){toast('Nothing waiting to send');return;}
+  const data=JSON.stringify({app:'343 Rounds',version:APP_VERSION,exported:new Date().toISOString(),engineer:SESSION&&SESSION.user?SESSION.user.name:'',
+    items:items.map(i=>({type:i.type,id:i.id,added:new Date(i.added).toISOString(),lastError:i.err||'',payload:i.payload||i.record||i}))},null,1);
+  const name='Unsent rounds '+new Date().toISOString().slice(0,16).replace('T',' ').replace(':','')+'.json';
+  const file=new File([data],name,{type:'application/json'});
+  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Unsent rounds'});return;}}catch(e){if(e.name==='AbortError')return;}
+  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();a.remove();
 }
 function syncAction(){if(needsSignIn){reSignIn();return;}processOutbox();}
 function reSignIn(){
